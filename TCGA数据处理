@@ -1,0 +1,372 @@
+TCGA数据处理 在R中处理
+setwd("C:\\Users\\如意\\Desktop\\Datas\\CHOL")
+rm(list=ls())
+install.packages("rjson")
+install.packages("jsonlite")
+library("rjson")
+library(jsonlite)
+json <- jsonlite::fromJSON("metadata.cart.2023-10-25.json")
+View(json)
+#id <- json$associated_entities[[1]][,1]
+sample_id <- sapply(json$associated_entities,function(x){x[,1]})
+file_sample <- data.frame(sample_id,file_name=json$file_name)  
+
+#count_file <- list.files('gdc_download_20xxxxxx_xxxxxx.xxxxxx', pattern = '*.tsv',recursive = TRUE)
+count_file <- list.files('gdc_download_20231025_023430.489270', pattern = '*gene_counts.tsv',recursive = TRUE)
+count_file_name <- strsplit(count_file,split='/')
+count_file_name <- sapply(count_file_name,function(x){x[2]})
+matrix = data.frame(matrix(nrow=60660,ncol=0))
+for (i in 1:length(count_file_name)){
+  path = paste0('gdc_download_20231025_023430.489270//',count_file[i])
+  data<- read.delim(path,fill = TRUE,header = FALSE,row.names = 1)
+  colnames(data)<-data[2,]
+  data <-data[-c(1:6),]
+  data <- data[3] #取出unstranded列（得到COUNT矩阵），若想提取fpkm-unstranded则改为data[7]，fpkm-up-unstranded改为data[8]
+  colnames(data) <- file_sample$sample_id[which(file_sample$file_name==count_file_name[i])]
+  matrix <- cbind(matrix,data)
+}
+
+write.csv(matrix,'COUNT_matrix.csv',row.names = TRUE)
+
+path = paste0('gdc_download_20231025_023430.489270//',count_file[1])
+data<- as.matrix(read.delim(path,fill = TRUE,header = FALSE,row.names = 1))
+gene_name <-data[-c(1:6),1]
+matrix0 <- cbind(gene_name,matrix)
+#将gene_name列去除重复的基因，保留每个基因最大表达量结果
+matrix0 <- aggregate( . ~ gene_name,data=matrix0, max)    
+#将gene_name列设为行名
+rownames(matrix0) <- matrix0[,1]
+matrix0 <- matrix0[,-1]
+write.csv(matrix0,'Gene_Symbol_matrix.csv',row.names = TRUE)
+
+
+
+##读入我们前面整理出的COUNT矩阵文件
+data1 <- read.csv("Gene_Symbol_matrix.csv",header = T, row.names = 1)
+
+#构建分组矩阵。
+tumor <- colnames(data1)[as.integer(substr(colnames(data1),14,15)) < 10] ###样本名的14、15位为1-9的是肿瘤样本,>=10为正常或癌旁样本(根据选取数据修改)
+normal <- colnames(data1)[as.integer(substr(colnames(data1),14,15)) >= 10]
+tumor_sample <- data1[,tumor]
+normal_sample <- data1[,normal]
+data1 <- cbind(tumor_sample,normal_sample) 
+group_list <- c(rep('tumor',ncol(tumor_sample)),rep('normal',ncol(normal_sample)))
+condition = factor(group_list)
+coldata <- data.frame(row.names = colnames(data1), condition)
+View(coldata)
+
+###
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+BiocManager::install("DESeq2")
+library(DESeq2)
+## 制作dds对象，构建差异基因分析所需的数据格式
+dds <- DESeqDataSetFromMatrix(countData = data1, colData = coldata, design = ~  condition)
+
+##进行差异分析
+dds <- DESeq(dds)	
+
+##提取结果
+result <- as.data.frame(results(dds)) # results()从DESeq分析中提取出结果表
+
+##提取显著差异表达基因的矩阵
+DGE <-subset(result,padj < 0.05 & (log2FoldChange > 1 | log2FoldChange < -1))
+DGE <- DGE[order(DGE$log2FoldChange),]    
+
+##保存到文件
+write.csv(DGE,'DGE.csv',row.names = TRUE)
+##提取结果
+result <- as.data.frame(results(dds)) # results()从DESeq分析中提取出结果表
+
+result <- na.omit(result)
+result1 <- result[c(2,6)]
+
+#火山图
+result1$change = ifelse(result1$padj < 0.05 & abs(result1$log2FoldChange) >= 1, ifelse(result1$log2FoldChange> 1 ,'Up','Down'),'Stable')
+library('ggplot2')
+ggplot(result1, aes(x = log2FoldChange, y = -log10(padj),colour=change)) +
+  geom_point(alpha=0.3, size=3.5) +
+  scale_color_manual(values=c("#546de5","#d2dae2","#ff4757"))+
+  labs(title='Volcano plot',x="log2(fold change)",y="-log10 (padj)")+ # 坐标轴# 坐标轴和图标题title="Volcano plot",
+  theme_bw()+ #去除背景色
+  #xlim(-20, 20)+ #设置坐标轴范围
+  #ylim(0,40)+
+  # 辅助线
+  geom_vline(xintercept=c(-2,2),lty=3,col="black",lwd=0.8) +
+  geom_hline(yintercept = -log10(0.05),lty=3,col="black",lwd=0.8) +
+  theme(panel.grid = element_blank())+ #去除网格线
+  theme(plot.title = element_text(hjust = 0.5,size=24),
+        legend.position="bottom",
+        legend.title = element_blank(),
+        legend.text=element_text(size=18),
+        legend.key.size = unit(1, 'cm'),
+        legend.background = element_rect(fill="gray90", linetype="solid",colour ="gray"),
+        axis.title.x =element_text(size=18),
+        axis.title.y=element_text(size=18),
+        axis.text=element_text(size=14,face = "bold")
+  )
+
+#热图
+install.packages("pheatmap")
+install.packages("RColorBrewer")
+library(pheatmap)
+library(ggplot2)
+library(RColorBrewer)
+# 假设DGE是你的差异表达基因数据
+# 选择你想展示的基因和样本
+genes_to_show <- rownames(DGE)[1:50]  # 这里只展示前50个基因作为示例
+data_to_plot <- DGE[genes_to_show, ]
+
+# 归一化数据以更好地显示在热图上
+data_to_plot_normalized <- scale(t(data_to_plot))
+data_to_plot_normalized <- t(data_to_plot_normalized)
+
+#创建热图
+pheatmap(data_to_plot_normalized,
+         cellwidth = 20,
+         cellheight = 10,
+         fontsize = 10,
+         color = colorRampPalette(brewer.pal(9, "Blues"))(255),
+         border_color = NA,
+         cluster_rows = TRUE,
+         cluster_cols = TRUE,
+         show_rownames = TRUE,
+         show_colnames = TRUE)
+
+#####################GO富集分析###########
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("org.Hs.eg.db")
+BiocManager::install("clusterProfiler")
+
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(org.Hs.eg.db)
+
+#用一些公认的基因符号手动测试
+test_genes <- c("CETN2", "FZD4", "BBS1", "TSGA10", "SLC38A3", "PAXIP1")
+
+ego_test <- enrichGO(gene = test_genes,
+                     OrgDb = org.Hs.eg.db,
+                     keyType = "SYMBOL",
+                     ont = "BP",
+                     pAdjustMethod = "BH",
+                     qvalueCutoff = 0.05)
+
+print(ego_test)
+
+
+gene <- rownames(DGE)
+
+ego <- enrichGO(gene         = gene,
+                OrgDb        = org.Hs.eg.db,
+                keyType      = "SYMBOL",
+                ont          = "BP",
+                pAdjustMethod = "BH",
+                qvalueCutoff = 0.05)
+print(ego)
+
+library(ggplot2)
+library(clusterProfiler)
+ego_df <- as.data.frame(ego)
+ego_df$neg_log_pval <- -log10(ego_df$pvalue)
+p <- ggplot(ego_df, aes(x = reorder(Description, neg_log_pval), y = neg_log_pval)) +
+  geom_bar(stat = "identity") +
+  coord_flip() + # 坐标翻转，使得条形图水平显示
+  labs(title = "GO Enrichment Analysis",
+       x = "GO terms",
+       y = "-log10(p-value)") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(size = 8))
+
+#显示图形
+print(p)
+
+
+#GO富集分析BP模块
+GO_BP<-enrichGO( gene = gene_symbols,
+                 OrgDb = GO_database,
+                 keyType = "SYMBOL",
+                 ont = "BP",
+                 pvalueCutoff = 0.05,
+                 pAdjustMethod = "BH",
+                 qvalueCutoff = 0.05,
+                 minGSSize = 10,
+                 maxGSSize = 500,
+                 readable = T)
+
+#GO-BP功能网络图
+plotGOgraph(GO_BP)
+
+#GO富集分析CC模块
+GO_CC<-enrichGO( gene = gene_symbols,
+                 OrgDb = GO_database,
+                 keyType = "SYMBOL",
+                 ont = "CC",
+                 pvalueCutoff = 0.05,
+                 pAdjustMethod = "BH",
+                 qvalueCutoff = 0.05,
+                 minGSSize = 10,
+                 maxGSSize = 500,
+                 readable = T)
+
+#GO-CC功能网络图
+plotGOgraph(GO_CC)
+
+#GO富集分析MF模块
+GO_MF<-enrichGO( gene = gene_symbols,
+                 OrgDb = GO_database,
+                 keyType = "SYMBOL",
+                 ont = "MF",
+                 pvalueCutoff = 0.05,
+                 pAdjustMethod = "BH",
+                 qvalueCutoff = 0.05,
+                 minGSSize = 10,
+                 maxGSSize = 500,
+                 readable = T)
+
+#GO-MF功能网络图
+plotGOgraph(GO_MF)
+
+ego_ALL <- as.data.frame(ego)
+ego_result_BP <- as.data.frame(GO_BP)
+ego_result_CC <- as.data.frame(GO_CC)
+ego_result_MF <- as.data.frame(GO_MF)
+ego <- rbind(ego_result_BP,ego_result_CC,ego_result_MF)#或者这样也能得到ego_ALL一样的结果
+write.csv(ego_ALL,file = "ego_ALL.csv",row.names = T)
+write.csv(ego_result_BP,file = "ego_result_BP.csv",row.names = T)
+write.csv(ego_result_CC,file = "ego_result_CC.csv",row.names = T)
+write.csv(ego_result_MF,file = "ego_result_MF.csv",row.names = T)
+write.csv(ego,file = "ego.csv",row.names = T)
+
+display_number = c(22, 22, 22)#这三个数字分别代表选取的BP、CC、MF的通路条数，这个自己设置就行了
+ego_result_BP <- as.data.frame(GO_BP)[1:display_number[1], ]
+ego_result_CC <- as.data.frame(GO_CC)[1:display_number[2], ]
+ego_result_MF <- as.data.frame(GO_MF)[1:display_number[3], ]
+
+go_enrich_df <- data.frame(
+  ID=c(ego_result_BP$ID, ego_result_CC$ID, ego_result_MF$ID),                         Description=c(ego_result_BP$Description,ego_result_CC$Description,ego_result_MF$Description),
+  GeneNumber=c(ego_result_BP$Count, ego_result_CC$Count, ego_result_MF$Count),
+  type=factor(c(rep("biological process", display_number[1]), 
+                rep("cellular component", display_number[2]),
+                rep("molecular function", display_number[3])), 
+              levels=c("biological process", "cellular component","molecular function" )))
+
+for(i in 1:nrow(go_enrich_df)){
+  description_splite=strsplit(go_enrich_df$Description[i],split = " ")
+  description_collapse=paste(description_splite[[1]][1:5],collapse = " ") #这里的5就是指5个单词的意思，可以自己更改
+  go_enrich_df$Description[i]=description_collapse
+  go_enrich_df$Description=gsub(pattern = "NA","",go_enrich_df$Description)
+}
+
+##开始绘制GO柱状图
+###横着的柱状图
+go_enrich_df$type_order=factor(rev(as.integer(rownames(go_enrich_df))),labels=rev(go_enrich_df$Description))#这一步是必须的，为了让柱子按顺序显示，不至于很乱
+COLS <- c("#66C3A5", "#8DA1CB", "#FD8D62")#设定颜色
+
+ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) + #横纵轴取值
+  geom_bar(stat="identity", width=0.8) + #柱状图的宽度，可以自己设置
+  scale_fill_manual(values = COLS) + ###颜色
+  coord_flip() + ##这一步是让柱状图横过来，不加的话柱状图是竖着的
+  xlab("GO term") + 
+  ylab("Gene_Number") + 
+  labs(title = "The Most Enriched GO Terms")+
+  theme_bw()
+
+###竖着的柱状图 
+go_enrich_df$type_order=factor(rev(as.integer(rownames(go_enrich_df))),labels=rev(go_enrich_df$Description))
+COLS <- c("#66C3A5", "#8DA1CB", "#FD8D62")
+ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) + 
+  geom_bar(stat="identity", width=0.8) + 
+  scale_fill_manual(values = COLS) + 
+  theme_bw() + 
+  xlab("GO term") + 
+  ylab("Num of Genes") + 
+  labs(title = "The Most Enriched GO Terms")+ 
+  theme(axis.text.x=element_text(face = "bold", color="gray50",angle = 70,vjust = 1, hjust = 1 ))#angle是坐标轴字体倾斜的角度，可以自己设置
+
+################KEGG分析##############
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")
+}
+
+BiocManager::install("clusterProfiler")
+BiocManager::install("org.Hs.eg.db")
+
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+gene_symbols <- rownames(DGE)
+gene_mapping <- select(org.Hs.eg.db, 
+                       keys = gene_symbols, 
+                       keytype = "SYMBOL", 
+                       columns = "ENTREZID")
+gene_mapping <- gene_mapping[!is.na(gene_mapping$ENTREZID), ]
+library(clusterProfiler)
+KEGG <- enrichKEGG(gene         = gene_mapping$ENTREZID,
+                           organism     = 'hsa', 
+                           keyType      = 'kegg', 
+                           pAdjustMethod = "BH", 
+                           qvalueCutoff = 0.05)
+print(KEGG)
+
+#柱状图
+barplot(KEGG,showCategory = 40,title = 'KEGG Pathway')
+#点状图
+dotplot(KEGG)
+
+#基因-通路关联网络图
+enrichplot::cnetplot(KEGG,circular=FALSE,colorEdge = TRUE)#circluar为指定是否环化，基因过多时建议设置为FALSE
+
+#基因-通路关联热图
+enrichplot::heatplot(KEGG,showCategory = 50)
+
+
+library(clusterProfiler)
+library(enrichplot)
+KEGG2 <- pairwise_termsim(KEGG)
+#通路间关联网络图
+enrichplot::emapplot(KEGG2,showCategory =50, color = "p.adjust", layout = "kk")
+
+#将所有KEGG富集到的通路写入本地文件查看
+write.table(KEGG$ID, file = "C:/Users/如意/Desktop/Datas/CHOL/KEGG_IDs.txt",
+            append = FALSE, quote = TRUE, sep = " ",
+            eol = "\n", na = "NA", dec = ".", row.names = TRUE,
+            col.names = TRUE, qmethod = c("escape", "double"),
+            fileEncoding = "")
+
+######将GO和KEGG富集的结果储存###
+write.csv(ego,'ego.csv',row.names = TRUE)
+write.csv(KEGG,'kegg.csv',row.names = TRUE)
+
+##开始绘制KEGG气泡图
+kk <- KEGG
+###柱状图
+hh <- as.data.frame(kk)
+rownames(hh) <- 1:nrow(hh)
+hh$order=factor(rev(as.integer(rownames(hh))),labels = rev(hh$Description))
+ggplot(hh,aes(y=order,x=Count,fill=p.adjust))+
+  geom_bar(stat = "identity",width=0.7)+####柱子宽度
+  #coord_flip()+##颠倒横纵轴
+  scale_fill_gradient(low = "red",high ="blue" )+#颜色自己可以换
+  labs(title = "KEGG Pathways Enrichment",
+       x = "Gene numbers", 
+       y = "Pathways")+
+  theme(axis.title.x = element_text(face = "bold",size = 16),
+        axis.title.y = element_text(face = "bold",size = 16),
+        legend.title = element_text(face = "bold",size = 16))+
+  theme_bw()
+
+###气泡图
+hh <- as.data.frame(kk)
+rownames(hh) <- 1:nrow(hh)
+hh$order=factor(rev(as.integer(rownames(hh))),labels = rev(hh$Description))
+ggplot(hh,aes(y=order,x=Count))+
+  geom_point(aes(size=Count,color=-1*p.adjust))+# 修改点的大小
+  scale_color_gradient(low="green",high = "red")+
+  labs(color=expression(p.adjust,size="Count"), 
+       x="Gene Number",y="Pathways",title="KEGG Pathway Enrichment")+
+  theme_bw()
