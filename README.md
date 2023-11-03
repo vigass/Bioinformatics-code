@@ -15,7 +15,7 @@ TCGA数据处理使用说明
 ----
 设置工作路径,例如:"/home/user/TCGA_data"
 
-需要在TCGA(https://portal.gdc.cancer.gov/)下载数据:
+需要在TCGA下载数据(https://portal.gdc.cancer.gov/):
 
 gdc_sample_sheet.20xx-xx-xx.tsv
 metadata.cart.20xx-xx-xx.json
