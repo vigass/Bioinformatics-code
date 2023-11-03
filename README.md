@@ -9,25 +9,44 @@ My codes
 
 
 
-TCGA数据处理  
-###################代码部分  
-TCGA数据处理采用DESeq2包进行数据处理  
+TCGA数据处理采用DESeq2包进行数据处理
+
+设置工作路径,例如:"/home/user/TCGA_data"
+
+需要在TCGA(https://portal.gdc.cancer.gov/)下载数据:
+
+gdc_sample_sheet.20xx-xx-xx.tsv
+metadata.cart.20xx-xx-xx.json
+gdc_download_20xxxxxx_xxxxxx.tar.gz
+将gdc_download_20xxxxxx_xxxxxx.tar.gz解压到当前工作路径
+
+修改代码中默认的工作路径为实际工作路径,例如:
+
+work_dir = "/home/user/TCGA_data"
+
+随后运行代码进行数据处理。
+
+
+
+
+
+
+
+
+
+
+GEO使用说明:  
+
+在getGEO函数中填入需要分析的GSE ID,替换示例中的GSE1402。
+根据数据集的样本信息,修改step3中的分组代码,生成自己需要的分组方式。
+运行代码,即可得到该GSE数据集的PCA结果,差异表达基因列表,以及GO和KEGG富集分析结果。
+代码提供了完整的分析流程,结果可直接用于发表。
+
+
+
 
 
   
-"C:\\Users\\如意\\Desktop\\Datas\\CHOL"为工作路径
-要求为
-需要在TCGA(https://portal.gdc.cancer.gov/)下载数据
-数据为  
-gdc_sample_sheet.20xx-xx-xx.tsv  
-metadata.cart.20xx-xx-xx.json  
-gdc_download_20xxxxxx_xxxxxx.xxxxxx.tar.gz  
-这三个  
-并且需要将gdc_download_20xxxxxx_xxxxxx.xxxxxx.tar.gz解压至当前文件夹  
-  
-随后需要将当前代码中的"C:\\Users\\如意\\Desktop\\Datas\\CHOL"改为数据集所在工作路径  
-随后即可运行代码
-
 
 
 
