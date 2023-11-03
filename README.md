@@ -18,7 +18,7 @@ TCGA数据处理采用DESeq2包进行数据处理
 gdc_sample_sheet.20xx-xx-xx.tsv
 metadata.cart.20xx-xx-xx.json
 gdc_download_20xxxxxx_xxxxxx.tar.gz
-将gdc_download_20xxxxxx_xxxxxx.tar.gz解压到当前工作路径
+  将gdc_download_20xxxxxx_xxxxxx.tar.gz解压到当前工作路径
 
 修改代码中默认的工作路径为实际工作路径,例如:
 
