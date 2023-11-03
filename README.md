@@ -39,7 +39,7 @@ work_dir = "/home/user/TCGA_data"
 
 
 
-GEO使用说明:    
+GEO使用说明:   
 ====  
 在getGEO函数中填入需要分析的GSE ID,替换示例中的GSE1402。  
 
