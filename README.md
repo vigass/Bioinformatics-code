@@ -8,7 +8,7 @@ My codes
 
 
 
-
+====
 TCGA数据处理采用DESeq2包进行数据处理
 
 设置工作路径,例如:"/home/user/TCGA_data"
@@ -38,7 +38,7 @@ work_dir = "/home/user/TCGA_data"
 
 
 
-        
+====  
 GEO使用说明:    
 
 在getGEO函数中填入需要分析的GSE ID,替换示例中的GSE1402。  
