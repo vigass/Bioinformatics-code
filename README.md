@@ -8,9 +8,9 @@ My codes
 
 
 
-====
-TCGA数据处理采用DESeq2包进行数据处理
 
+TCGA数据处理采用DESeq2包进行数据处理
+====
 设置工作路径,例如:"/home/user/TCGA_data"
 
 需要在TCGA(https://portal.gdc.cancer.gov/)下载数据:
@@ -38,9 +38,9 @@ work_dir = "/home/user/TCGA_data"
 
 
 
-====  
-GEO使用说明:    
 
+GEO使用说明:    
+====  
 在getGEO函数中填入需要分析的GSE ID,替换示例中的GSE1402。  
 
 根据数据集的样本信息,修改step3中的分组代码,生成自己需要的分组方式。  
