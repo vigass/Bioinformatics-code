@@ -41,7 +41,7 @@ work_dir = "/home/user/TCGA_data"
 
 
 
-GEO使用说明:   
+GEO数据处理使用说明:   
 ====  
 采用limma包进行数据处理
 ----
