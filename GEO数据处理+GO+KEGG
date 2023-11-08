@@ -3,7 +3,7 @@ rm(list=ls())
 ################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
 if (!require("BiocManager", quietly = TRUE))
-  install.packages(“BiocManager”)
+  install.packages("BiocManager")
 
 #通过Bioconductor下载GEOquery包
 BiocManager::install("GEOquery")
