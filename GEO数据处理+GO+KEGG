@@ -2,11 +2,11 @@ setwd('C:\\Users\\如意\\Desktop\\Sample')
 rm(list=ls())
 ################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
-if (!require(“BiocManager”, quietly = TRUE))
+if (!require("BiocManager", quietly = TRUE))
   install.packages(“BiocManager”)
 
 #通过Bioconductor下载GEOquery包
-BiocManager::install(“GEOquery”)
+BiocManager::install("GEOquery")
 
 #加载GEOquery包
 library(GEOquery)
