@@ -1,4 +1,4 @@
-TCGA数据处理 在R中处理
+#TCGA数据处理 在R中处理
 setwd("C:\\Users\\如意\\Desktop\\Datas\\CHOL")
 rm(list=ls())
 install.packages("rjson")
