@@ -55,11 +55,10 @@ condition = factor(group_list)
 coldata <- data.frame(row.names = colnames(data1), condition)
 View(coldata)
 
-###
+###DEseq2包处理数据################################
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
   install.packages("BiocManager")
 }
-
 BiocManager::install("DESeq2")
 library(DESeq2)
 ## 制作dds对象，构建差异基因分析所需的数据格式
