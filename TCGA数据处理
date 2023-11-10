@@ -85,15 +85,21 @@ result <- na.omit(result)
 result1 <- result[c(2,6)]
 
 ##上下调基因判断
-results <- results(dds)
+significance_level <- 0.05
+log2FC_threshold <- 1
 
-# 添加一个列来指示基因是上调还是下调
-results$regulation <- ifelse(results$log2FoldChange > 1, "up",
-                             ifelse(results$log2FoldChange < -1, "down", "not significant"))
+# 筛选上调基因
+upregulated_genes <- subset(result1, log2FoldChange > log2FC_threshold & padj < significance_level)
+# 保存上调基因到TXT文件
+upregulated_genes <- data.frame(upregulated_genes)
 
-# 查看一些上调和下调的基因
-head(subset(results, regulation == "up"))
-head(subset(results, regulation == "down"))
+write.csv(upregulated_genes,'Up.csv',row.names = TRUE)
+
+# 筛选下调基因
+downregulated_genes <- subset(result1, log2FoldChange < -log2FC_threshold & padj < significance_level)
+downregulated_genes <- data.frame(downregulated_genes)
+# 保存下调基因到TXT文件
+write.csv(downregulated_genes,'Down.csv',row.names = TRUE)
 
 
 
