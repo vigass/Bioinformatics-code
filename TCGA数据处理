@@ -1,23 +1,23 @@
 #TCGA数据处理 在R中处理
-setwd("D:\\Datas\\COAD_TCGA")
+setwd("C:/Users/如意/Desktop/tcga_COAD")
 rm(list=ls())
 install.packages("rjson")
 install.packages("jsonlite")
 library("rjson")
 library(jsonlite)
-json <- jsonlite::fromJSON("metadata.cart.2023-11-09.json")
+json <- jsonlite::fromJSON("metadata.cart.2023-11-10.json")
 View(json)
 #id <- json$associated_entities[[1]][,1]
 sample_id <- sapply(json$associated_entities,function(x){x[,1]})
 file_sample <- data.frame(sample_id,file_name=json$file_name)  
 
 #count_file <- list.files('gdc_download_20xxxxxx_xxxxxx.xxxxxx', pattern = '*.tsv',recursive = TRUE)
-count_file <- list.files('gdc_download_20231109_061601.889572', pattern = '*gene_counts.tsv',recursive = TRUE)
+count_file <- list.files('gdc_download_20231110_073904.245919', pattern = '*gene_counts.tsv',recursive = TRUE)
 count_file_name <- strsplit(count_file,split='/')
 count_file_name <- sapply(count_file_name,function(x){x[2]})
 matrix = data.frame(matrix(nrow=60660,ncol=0))
 for (i in 1:length(count_file_name)){
-  path = paste0('gdc_download_20231109_061601.889572//',count_file[i])
+  path = paste0('gdc_download_20231110_073904.245919//',count_file[i])
   data<- read.delim(path,fill = TRUE,header = FALSE,row.names = 1)
   colnames(data)<-data[2,]
   data <-data[-c(1:6),]
@@ -28,7 +28,7 @@ for (i in 1:length(count_file_name)){
 
 write.csv(matrix,'COUNT_matrix.csv',row.names = TRUE)
 
-path = paste0('gdc_download_20231109_061601.889572//',count_file[1])
+path = paste0('gdc_download_20231110_073904.245919//',count_file[1])
 data<- as.matrix(read.delim(path,fill = TRUE,header = FALSE,row.names = 1))
 gene_name <-data[-c(1:6),1]
 matrix0 <- cbind(gene_name,matrix)
@@ -298,18 +298,38 @@ BiocManager::install("clusterProfiler")
 BiocManager::install("org.Hs.eg.db")
 
 
+
 library(AnnotationDbi)
 library(org.Hs.eg.db)
 library(clusterProfiler)
-gene_symbols <- rownames(DGE)
-gene_symbols <- data.frame(gene_symbols)
-gene_mapping <- gene_mapping[!is.na(gene_mapping$ENTREZID), ]
+gene <- rownames(DGE)
+gene_symbols <- rownames(result1)
+gene_symbols <- as.character(gene_symbols)
+gene_mapping <- AnnotationDbi::select(org.Hs.eg.db, 
+                                      keys = genes, 
+                                      keytype = "SYMBOL", 
+                                      columns = "ENTREZID")
+
+
+library(AnnotationDbi)
+library(org.Hs.eg.db)
+gene <- rownames(DGE)
+gene <- as.character(rownames(DGE))
+
+# 确保'genes'是包含基因符号的字符向量
+gene_mapping <- AnnotationDbi::select(org.Hs.eg.db, 
+                                      keys = gene, 
+                                      keytype = "SYMBOL", 
+                                      columns = "ENTREZID")
+
+
 KEGG <- enrichKEGG(gene         = gene_mapping$ENTREZID,
                    organism     = 'hsa', 
                    keyType      = 'kegg', 
                    pAdjustMethod = "BH", 
                    qvalueCutoff = 0.05)
 print(KEGG)
+
 
 #柱状图
 barplot(KEGG,showCategory = 40,title = 'KEGG Pathway')
