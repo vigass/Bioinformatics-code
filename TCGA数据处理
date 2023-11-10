@@ -76,11 +76,27 @@ DGE <- DGE[order(DGE$log2FoldChange),]
 
 ##保存到文件
 write.csv(DGE,'DGE.csv',row.names = TRUE)
+degs <- row.names(DGE)
+write.csv(degs, file = "DEGs.csv", row.names = FALSE)#####后续使用degs进行差异分析和富集表达
 ##提取结果
 result <- as.data.frame(results(dds)) # results()从DESeq分析中提取出结果表
 
 result <- na.omit(result)
 result1 <- result[c(2,6)]
+
+##上下调基因判断
+results <- results(dds)
+
+# 添加一个列来指示基因是上调还是下调
+results$regulation <- ifelse(results$log2FoldChange > 1, "up",
+                             ifelse(results$log2FoldChange < -1, "down", "not significant"))
+
+# 查看一些上调和下调的基因
+head(subset(results, regulation == "up"))
+head(subset(results, regulation == "down"))
+
+
+
 
 #火山图
 result1$change = ifelse(result1$padj < 0.05 & abs(result1$log2FoldChange) >= 1, ifelse(result1$log2FoldChange> 1 ,'Up','Down'),'Stable')
@@ -246,6 +262,7 @@ ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) + #横纵�
   ylab("Gene_Number") + 
   labs(title = "The Most Enriched GO Terms")+
   theme_bw()
+
 
 ###竖着的柱状图 
 go_enrich_df$type_order=factor(rev(as.integer(rownames(go_enrich_df))),labels=rev(go_enrich_df$Description))
