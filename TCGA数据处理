@@ -104,9 +104,12 @@ row_names <- rownames(down)
 column_data2 <- down$change
 combined_data2 <-  data.frame(RowName = row_names, ColumnData = column_data2)
 write.table(combined_data2,file = "down.txt",sep = "\t", row.names = FALSE, quote = FALSE)
-
-
-
+# 合并上调和下调基因数据
+all_genes <- rbind(upregulated_genes, downregulated_genes)
+# 创建包含基因名和方向的新数据框
+combined_data <- data.frame(Gene = rownames(all_genes), Direction = all_genes$direction)
+# 保存到TXT文件
+write.table(combined_data, file = "combined_genes.txt", sep = "\t", row.names = FALSE, quote = FALSE)
 
 #火山图
 result1$change = ifelse(result1$padj < 0.05 & abs(result1$log2FoldChange) >= 1, ifelse(result1$log2FoldChange> 1 ,'Up','Down'),'Stable')
