@@ -1,23 +1,23 @@
 #TCGA数据处理 在R中处理
-setwd("C:\\Users\\如意\\Desktop\\Datas\\CHOL")
+setwd("D:\\Datas\\COAD_TCGA")
 rm(list=ls())
 install.packages("rjson")
 install.packages("jsonlite")
 library("rjson")
 library(jsonlite)
-json <- jsonlite::fromJSON("metadata.cart.2023-10-25.json")
+json <- jsonlite::fromJSON("metadata.cart.2023-11-09.json")
 View(json)
 #id <- json$associated_entities[[1]][,1]
 sample_id <- sapply(json$associated_entities,function(x){x[,1]})
 file_sample <- data.frame(sample_id,file_name=json$file_name)  
 
 #count_file <- list.files('gdc_download_20xxxxxx_xxxxxx.xxxxxx', pattern = '*.tsv',recursive = TRUE)
-count_file <- list.files('gdc_download_20231025_023430.489270', pattern = '*gene_counts.tsv',recursive = TRUE)
+count_file <- list.files('gdc_download_20231109_061601.889572', pattern = '*gene_counts.tsv',recursive = TRUE)
 count_file_name <- strsplit(count_file,split='/')
 count_file_name <- sapply(count_file_name,function(x){x[2]})
 matrix = data.frame(matrix(nrow=60660,ncol=0))
 for (i in 1:length(count_file_name)){
-  path = paste0('gdc_download_20231025_023430.489270//',count_file[i])
+  path = paste0('gdc_download_20231109_061601.889572//',count_file[i])
   data<- read.delim(path,fill = TRUE,header = FALSE,row.names = 1)
   colnames(data)<-data[2,]
   data <-data[-c(1:6),]
@@ -28,7 +28,7 @@ for (i in 1:length(count_file_name)){
 
 write.csv(matrix,'COUNT_matrix.csv',row.names = TRUE)
 
-path = paste0('gdc_download_20231025_023430.489270//',count_file[1])
+path = paste0('gdc_download_20231109_061601.889572//',count_file[1])
 data<- as.matrix(read.delim(path,fill = TRUE,header = FALSE,row.names = 1))
 gene_name <-data[-c(1:6),1]
 matrix0 <- cbind(gene_name,matrix)
@@ -115,24 +115,19 @@ library(ggplot2)
 library(RColorBrewer)
 # 假设DGE是你的差异表达基因数据
 # 选择你想展示的基因和样本
-genes_to_show <- rownames(DGE)[1:50]  # 这里只展示前50个基因作为示例
-data_to_plot <- DGE[genes_to_show, ]
-
-# 归一化数据以更好地显示在热图上
-data_to_plot_normalized <- scale(t(data_to_plot))
-data_to_plot_normalized <- t(data_to_plot_normalized)
-
-#创建热图
-pheatmap(data_to_plot_normalized,
-         cellwidth = 20,
-         cellheight = 10,
-         fontsize = 10,
-         color = colorRampPalette(brewer.pal(9, "Blues"))(255),
-         border_color = NA,
+###
+res <- result
+significant_genes <- res[which(res$padj < 0.05), ]
+significant_gene_names <- rownames(significant_genes)
+sig_genes_expression <- data1[significant_gene_names, ]
+exprs_normalized <- t(scale(t(sig_genes_expression)))
+pheatmap(exprs_normalized,
          cluster_rows = TRUE,
          cluster_cols = TRUE,
-         show_rownames = TRUE,
-         show_colnames = TRUE)
+         show_rownames = FALSE,
+         show_colnames = FALSE,
+         color = colorRampPalette(brewer.pal(9, "Blues"))(255))
+
 
 #####################GO富集分析###########
 if (!requireNamespace("BiocManager", quietly = TRUE))
@@ -158,36 +153,16 @@ ego_test <- enrichGO(gene = test_genes,
 print(ego_test)
 
 
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("topGO")
+library(topGO)
+
 gene <- rownames(DGE)
-
-ego <- enrichGO(gene         = gene,
-                OrgDb        = org.Hs.eg.db,
-                keyType      = "SYMBOL",
-                ont          = "BP",
-                pAdjustMethod = "BH",
-                qvalueCutoff = 0.05)
-print(ego)
-
-library(ggplot2)
-library(clusterProfiler)
-ego_df <- as.data.frame(ego)
-ego_df$neg_log_pval <- -log10(ego_df$pvalue)
-p <- ggplot(ego_df, aes(x = reorder(Description, neg_log_pval), y = neg_log_pval)) +
-  geom_bar(stat = "identity") +
-  coord_flip() + # 坐标翻转，使得条形图水平显示
-  labs(title = "GO Enrichment Analysis",
-       x = "GO terms",
-       y = "-log10(p-value)") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(size = 8))
-
-#显示图形
-print(p)
-
-
 #GO富集分析BP模块
-GO_BP<-enrichGO( gene = gene_symbols,
-                 OrgDb = GO_database,
+GO_BP<-enrichGO( gene = gene,
+                 OrgDb = org.Hs.eg.db,
                  keyType = "SYMBOL",
                  ont = "BP",
                  pvalueCutoff = 0.05,
@@ -197,12 +172,11 @@ GO_BP<-enrichGO( gene = gene_symbols,
                  maxGSSize = 500,
                  readable = T)
 
-#GO-BP功能网络图
-plotGOgraph(GO_BP)
+
 
 #GO富集分析CC模块
-GO_CC<-enrichGO( gene = gene_symbols,
-                 OrgDb = GO_database,
+GO_CC<-enrichGO( gene = gene,
+                 OrgDb = org.Hs.eg.db,
                  keyType = "SYMBOL",
                  ont = "CC",
                  pvalueCutoff = 0.05,
@@ -212,12 +186,10 @@ GO_CC<-enrichGO( gene = gene_symbols,
                  maxGSSize = 500,
                  readable = T)
 
-#GO-CC功能网络图
-plotGOgraph(GO_CC)
 
 #GO富集分析MF模块
-GO_MF<-enrichGO( gene = gene_symbols,
-                 OrgDb = GO_database,
+GO_MF<-enrichGO( gene = gene,
+                 OrgDb = org.Hs.eg.db,
                  keyType = "SYMBOL",
                  ont = "MF",
                  pvalueCutoff = 0.05,
@@ -227,14 +199,14 @@ GO_MF<-enrichGO( gene = gene_symbols,
                  maxGSSize = 500,
                  readable = T)
 
-#GO-MF功能网络图
-plotGOgraph(GO_MF)
 
-ego_ALL <- as.data.frame(ego)
+
+
 ego_result_BP <- as.data.frame(GO_BP)
 ego_result_CC <- as.data.frame(GO_CC)
 ego_result_MF <- as.data.frame(GO_MF)
 ego <- rbind(ego_result_BP,ego_result_CC,ego_result_MF)#或者这样也能得到ego_ALL一样的结果
+ego_ALL <- as.data.frame(ego)
 write.csv(ego_ALL,file = "ego_ALL.csv",row.names = T)
 write.csv(ego_result_BP,file = "ego_result_BP.csv",row.names = T)
 write.csv(ego_result_CC,file = "ego_result_CC.csv",row.names = T)
@@ -296,20 +268,17 @@ BiocManager::install("clusterProfiler")
 BiocManager::install("org.Hs.eg.db")
 
 
-library(clusterProfiler)
+library(AnnotationDbi)
 library(org.Hs.eg.db)
-gene_symbols <- rownames(DGE)
-gene_mapping <- select(org.Hs.eg.db, 
-                       keys = gene_symbols, 
-                       keytype = "SYMBOL", 
-                       columns = "ENTREZID")
-gene_mapping <- gene_mapping[!is.na(gene_mapping$ENTREZID), ]
 library(clusterProfiler)
+gene_symbols <- rownames(DGE)
+gene_symbols <- data.frame(gene_symbols)
+gene_mapping <- gene_mapping[!is.na(gene_mapping$ENTREZID), ]
 KEGG <- enrichKEGG(gene         = gene_mapping$ENTREZID,
-                           organism     = 'hsa', 
-                           keyType      = 'kegg', 
-                           pAdjustMethod = "BH", 
-                           qvalueCutoff = 0.05)
+                   organism     = 'hsa', 
+                   keyType      = 'kegg', 
+                   pAdjustMethod = "BH", 
+                   qvalueCutoff = 0.05)
 print(KEGG)
 
 #柱状图
@@ -331,7 +300,7 @@ KEGG2 <- pairwise_termsim(KEGG)
 enrichplot::emapplot(KEGG2,showCategory =50, color = "p.adjust", layout = "kk")
 
 #将所有KEGG富集到的通路写入本地文件查看
-write.table(KEGG$ID, file = "C:/Users/如意/Desktop/Datas/CHOL/KEGG_IDs.txt",
+write.table(KEGG$ID, file = "D:\\Datas\\COAD_TCGA\\KEGG_IDs.txt",
             append = FALSE, quote = TRUE, sep = " ",
             eol = "\n", na = "NA", dec = ".", row.names = TRUE,
             col.names = TRUE, qmethod = c("escape", "double"),
