@@ -90,16 +90,20 @@ log2FC_threshold <- 1
 
 # 筛选上调基因
 upregulated_genes <- subset(result1, log2FoldChange > log2FC_threshold & padj < significance_level)
-# 保存上调基因到TXT文件
 upregulated_genes <- data.frame(upregulated_genes)
 
-write.csv(upregulated_genes,'Up.csv',row.names = TRUE)
+up <- upregulated_genes
+down <- downregulated_genes
+row_names1 <- rownames(up)
+column_data1 <- up$change
+combined_data1 <-  data.frame(RowName = row_names, ColumnData = column_data1)
+write.table(combined_data1,file = "up.txt",sep = "\t", row.names = FALSE, quote = FALSE)
 
-# 筛选下调基因
-downregulated_genes <- subset(result1, log2FoldChange < -log2FC_threshold & padj < significance_level)
-downregulated_genes <- data.frame(downregulated_genes)
-# 保存下调基因到TXT文件
-write.csv(downregulated_genes,'Down.csv',row.names = TRUE)
+down <- downregulated_genes
+row_names <- rownames(down)
+column_data2 <- down$change
+combined_data2 <-  data.frame(RowName = row_names, ColumnData = column_data2)
+write.table(combined_data2,file = "down.txt",sep = "\t", row.names = FALSE, quote = FALSE)
 
 
 
