@@ -1,0 +1,81 @@
+rm(list=ls())
+library(CIBERSORT)
+library(reader)
+library(ggplot2)
+library(reshape2)
+library(ggpubr)
+library(dplyr)
+data("LM22")
+TCGA_exp="D:\\JOB\\免疫侵润\\LUAD.txt"
+data=read.table(TCGA_exp)
+data1=data[!duplicated(data$gene),]
+write.table(data1,"D:\\JOB\\免疫侵润\\LUAD.txt")
+TCGA_exp1=read.table(TCGA_exp,row.names = TCGA_exp1$gene)
+TCGA_Exp=TCGA_exp1[,-c(1,2)]
+TCGA_TME.results <- cibersort(LM22,TCGA_Exp, perm = 0, QN = F)
+
+#write.csv(TCGA_TME.results, "C:\\Users\\lengf\\Desktop\\免疫侵润\\TCGA_CIBERSORT_Results_fromRcode.csv")
+
+group_list <- ifelse(as.numeric(substring(rownames(TCGA_TME.results),14,15)) < 10,
+                    "Tumor","Normal") %>% factor(.,levels = c("Normal","Tumor"))
+group_list
+## 3. 绘图
+# 3.1 数据粗处理
+TME_data <- as.data.frame(TCGA_TME.results[,1:22])
+
+TME_data$group <- group_list
+TME_data$sample <- row.names(TME_data)
+
+# 2.2 融合数据
+TME_New = melt(TME_data)
+
+## Using group, sample as id variables
+
+colnames(TME_New)=c("Group","Sample","Celltype","Composition")  #设置行名
+head(TME_New)
+# 3.3 按免疫细胞占比中位数排序绘图（可选）
+plot_order = TME_New[TME_New$Group=="Tumor",] %>% 
+  group_by(Celltype) %>% 
+  summarise(m = median(Composition)) %>% 
+  arrange(desc(m)) %>% 
+  pull(Celltype)
+
+## `summarise()` ungrouping output (override with `.groups` argument)
+
+TME_New$Celltype = factor(TME_New$Celltype,levels = plot_order)
+
+
+
+
+# 3.3 出图
+if(T){
+  mytheme <- theme(plot.title = element_text(size = 12,color="black",hjust = 0.5),
+                   axis.title = element_text(size = 12,color ="black"), 
+                   axis.text = element_text(size= 12,color = "black"),
+                   panel.grid.minor.y = element_blank(),
+                   panel.grid.minor.x = element_blank(),
+                   axis.text.x = element_text(angle = 45, hjust = 1 ),
+                   panel.grid=element_blank(),
+                   legend.position = "top",
+                   legend.text = element_text(size= 12),
+                   legend.title= element_text(size= 12)
+  ) }
+
+box_TME <- ggplot(TME_New, aes(x = Celltype, y = Composition))+ 
+  labs(y="Cell composition",x= NULL,title = "TME Cell composition")+  
+  geom_boxplot(aes(fill = Group),position=position_dodge(0.5),width=0.5,outlier.alpha = 0)+ 
+  scale_fill_manual(values = c("#1CB4B8", "#EB7369"))+
+  theme_classic() + mytheme + 
+  stat_compare_means(aes(group =  Group),
+                     label = "p.signif",
+                     method = "wilcox.test",
+                     hide.ns = T)
+
+box_TME;ggsave("C:\\Users\\lengf\\Desktop\\免疫侵润\\TCGA_HNSCC_TME.pdf",box_TME,height=15,width=25,unit="cm")
+
+
+
+
+TCGA_TME_four = as.data.frame(TCGA_TME.results[,1:20])
+head(TCGA_TME_four,3)
+
