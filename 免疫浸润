@@ -1,4 +1,5 @@
 rm(list=ls())
+setwd('D:\\Datas\\COAD_TCGA')
 library(CIBERSORT)
 library(reader)
 library(ggplot2)
@@ -6,18 +7,14 @@ library(reshape2)
 library(ggpubr)
 library(dplyr)
 data("LM22")
-TCGA_exp="D:\\JOB\\免疫侵润\\LUAD.txt"
-data=read.table(TCGA_exp)
-data1=data[!duplicated(data$gene),]
-write.table(data1,"D:\\JOB\\免疫侵润\\LUAD.txt")
-TCGA_exp1=read.table(TCGA_exp,row.names = TCGA_exp1$gene)
-TCGA_Exp=TCGA_exp1[,-c(1,2)]
-TCGA_TME.results <- cibersort(LM22,TCGA_Exp, perm = 0, QN = F)
-
-#write.csv(TCGA_TME.results, "C:\\Users\\lengf\\Desktop\\免疫侵润\\TCGA_CIBERSORT_Results_fromRcode.csv")
+TCGA_exp <- read.csv("Gene_Symbol_matrix.csv")
+row.names(TCGA_exp)<- TCGA_exp[,1]
+TCGA_exp <- TCGA_exp[,-1]
+TCGA_TME.results <- cibersort(LM22,TCGA_exp, perm = 0, QN = F)
+#write.csv(TCGA_TME.results, "D:\\Datas\\COAD_TCGA\\TCGA_CIBERSORT_Results_fromRcode.csv")
 
 group_list <- ifelse(as.numeric(substring(rownames(TCGA_TME.results),14,15)) < 10,
-                    "Tumor","Normal") %>% factor(.,levels = c("Normal","Tumor"))
+                     "Tumor","Normal") %>% factor(.,levels = c("Normal","Tumor"))
 group_list
 ## 3. 绘图
 # 3.1 数据粗处理
@@ -71,11 +68,10 @@ box_TME <- ggplot(TME_New, aes(x = Celltype, y = Composition))+
                      method = "wilcox.test",
                      hide.ns = T)
 
-box_TME;ggsave("C:\\Users\\lengf\\Desktop\\免疫侵润\\TCGA_HNSCC_TME.pdf",box_TME,height=15,width=25,unit="cm")
+box_TME;ggsave("D:\\Datas\\COAD_TCGA\\TCGA_HNSCC_TME.pdf",box_TME,height=15,width=25,unit="cm")
 
 
 
 
 TCGA_TME_four = as.data.frame(TCGA_TME.results[,1:20])
 head(TCGA_TME_four,3)
-
