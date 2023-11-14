@@ -1,4 +1,4 @@
-setwd('C:\\Users\\如意\\Desktop\\Sample')
+setwd('C:\\Users\\如意\\Desktop\\JIA_GEO')
 rm(list=ls())
 ################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
@@ -50,14 +50,8 @@ library(stringr)
 table(colnames(exp))
 
 #建立分组
-group_list <- ifelse(str_detect(pd$description, "control"), "group1",
-              ifelse(str_detect(pd$description, "PBMC isolated by Ficoll gradient centrifugation from JSpA patient"), "group2",
-              ifelse(str_detect(pd$description, "pauciaticular course JRA patient"), "group3",
-              ifelse(str_detect(pd$description, "polyaticular course JRA patient"), "group4",
-              ifelse(str_detect(pd$description, "SFMC isolated by Ficoll gradient centrifugation from JSpA patient"), "group5",
-              ifelse(str_detect(pd$description, "pauciarticular JRA patient"), "group6",
-                                                 "group7"))))))
-group_list <- factor(group_list, levels = c("group1", "group2", "group3", "group4", "group5", "group6","group7"))
+group_list <- ifelse(str_detect(pd$source_name_ch1, "PBMC"), "PBMC", "SFMC")
+group_list <- factor(group_list, levels = c("PBMC","SFMC"))
 ####分组根据pd的description决定###
 
 #查看分组信息
@@ -98,7 +92,7 @@ dat.pca <- PCA(dat, graph = FALSE)
 pca_plot <- fviz_pca_ind(dat.pca,
                          geom.ind = "point",
                          col.ind = group_list,
-                         palette = c("#00AFBB", "#E7B800","#0013B4","#E9b9AA","#91B5A9","#EDCA7F","#8CB9C0"),#####色彩颜色根据分组个数决定
+                         palette = c("#00AFBB", "#E7B800"),#####色彩颜色根据分组个数决定
                          addEllipses = TRUE,
                          legend.title = "Groups")
 
