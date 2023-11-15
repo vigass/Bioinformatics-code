@@ -1,4 +1,4 @@
-setwd('C:\\Users\\如意\\Desktop\\JIA_GEO')
+setwd('C:\\Users\\如意\\Desktop\\GIST_GEO')
 rm(list=ls())
 ################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
@@ -10,7 +10,7 @@ BiocManager::install("GEOquery")
 
 #加载GEOquery包
 library(GEOquery)
-gse="GSE1402"
+gse="GSE31802"
 
 #getGEO的第一个参数是GSE序列号，destdir指定了下载的路径('.'代表在当前目录下)
 #getGPL表示是否下载GPL数据
@@ -50,8 +50,10 @@ library(stringr)
 table(colnames(exp))
 
 #建立分组
-group_list <- ifelse(str_detect(pd$source_name_ch1, "PBMC"), "PBMC", "SFMC")
-group_list <- factor(group_list, levels = c("PBMC","SFMC"))
+group_list <- ifelse(str_detect(pd$`grade:ch1`, "high"), "high",
+                     ifelse(str_detect(pd$`grade:ch1`,"intermediate"),"intermediate",
+                     ifelse(str_detect(pd$`grade:ch1`,"low"),"low","NA")))
+group_list <- factor(group_list, levels = c("high","intermediate","low","NA"))
 ####分组根据pd的description决定###
 
 #查看分组信息
@@ -62,10 +64,19 @@ if(T){
   a = getGEO(gpl,destdir = ".")
   b = a@dataTable@table
   colnames(b)
-  ids2 = b[,c("ID","Gene Symbol")]
+  ids2 = b[,c("ID","GENE_SYMBOL")]
   colnames(ids2) = c("probe_id","symbol")
   ids2 = ids2[ids2$symbol!="" & !str_detect(ids2$symbol,"///"),]
 }
+#########保存表达矩阵##########
+exp1 <- data.frame(exp)
+exp1 <- mutate(exp1, probe_id = rownames(exp))
+exp1 <- merge(x = exp1, y = ids2, by = "probe_id")
+exp1 <- exp1[!duplicated(exp1$symbol),]
+row.names(exp1) <- exp1$symbol
+exp1 <- exp1[,-1]
+exp1 <- exp1[,-ncol(exp1)]
+write.csv(exp1, file = "exp1_processed.csv", row.names = FALSE)
 
 #保存上述提取的数据
 save(group_list,ids2,exp,pd,file = "step3_output.Rdata")
@@ -92,7 +103,7 @@ dat.pca <- PCA(dat, graph = FALSE)
 pca_plot <- fviz_pca_ind(dat.pca,
                          geom.ind = "point",
                          col.ind = group_list,
-                         palette = c("#00AFBB", "#E7B800"),#####色彩颜色根据分组个数决定
+                         palette = c("#00AFBB", "#E7B800","#a23412","#c2351f"),#####色彩颜色根据分组个数决定
                          addEllipses = TRUE,
                          legend.title = "Groups")
 
@@ -290,7 +301,7 @@ kegg_enrichment <- enrichKEGG(gene         = entrez_ids,
                               pvalueCutoff = 0.05,
                               qvalueCutoff = 0.2)
 
-# GO富集结果可视化
+# GO富集结果可视化(气泡图)
 go_dotplot <- dotplot(result_bp) + ggtitle("GO Enrichment Analysis - BP") +
   theme(legend.position = "none")
 go_dotplot <- dotplot(result_cc) + ggtitle("GO Enrichment Analysis - CC") +
@@ -298,7 +309,7 @@ go_dotplot <- dotplot(result_cc) + ggtitle("GO Enrichment Analysis - CC") +
 go_dotplot <- dotplot(result_mf) + ggtitle("GO Enrichment Analysis - MF") +
   theme(legend.position = "none")
 
-# KEGG富集结果可视化
+# KEGG富集结果可视化(气泡图)
 kegg_dotplot <- dotplot(kegg_enrichment) + ggtitle("KEGG Pathway Enrichment Analysis")
 kegg_dotplot
 # 保存富集分析结果
