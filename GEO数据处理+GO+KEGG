@@ -76,7 +76,7 @@ exp1 <- exp1[!duplicated(exp1$symbol),]
 row.names(exp1) <- exp1$symbol
 exp1 <- exp1[,-1]
 exp1 <- exp1[,-ncol(exp1)]
-write.csv(exp1, file = "exp1_processed.csv", row.names = FALSE)
+write.csv(exp1, file = "exp1.csv", row.names = FALSE)
 
 #保存上述提取的数据
 save(group_list,ids2,exp,pd,file = "step3_output.Rdata")
