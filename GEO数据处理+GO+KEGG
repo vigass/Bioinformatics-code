@@ -68,7 +68,7 @@ if(T){
   colnames(ids2) = c("probe_id","symbol")
   ids2 = ids2[ids2$symbol!="" & !str_detect(ids2$symbol,"///"),]
 }
-#########保存表达矩阵##########
+#########Step4 保存表达矩阵##########
 exp1 <- data.frame(exp)
 exp1 <- mutate(exp1, probe_id = rownames(exp))
 exp1 <- merge(x = exp1, y = ids2, by = "probe_id")
@@ -82,7 +82,7 @@ write.csv(exp1, file = "exp1_processed.csv", row.names = FALSE)
 save(group_list,ids2,exp,pd,file = "step3_output.Rdata")
 
 
-######################Step4 主成分分析##############
+######################Step5 主成分分析##############
 
 #清空当前环境下的变量
 rm(list = ls())
@@ -115,7 +115,7 @@ ggsave(plot = pca_plot, filename = paste0(gse,"PCA.png"))
 save(pca_plot, file = "pca_plot. Rdata")
 
 
-###############Step5   差异基因表达分析##################
+###############Step6   差异基因表达分析##################
 #清除环境变量并加载Step2和3中保存的数据
 rm(list = ls())
 load("step2_output.Rdata")
@@ -179,7 +179,7 @@ head(deg) #查看基因注释后的前几个结果
 save(logFC_t,deg,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
 
-################Step6 可视化######################
+################Step7 可视化######################
 #清除环境变量并加载包
 rm(list = ls())
 load("step2_output.Rdata")
