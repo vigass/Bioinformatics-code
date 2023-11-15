@@ -84,32 +84,40 @@ result <- as.data.frame(results(dds)) # results()从DESeq分析中提取出结�
 result <- na.omit(result)
 result1 <- result[c(2,6)]
 
-##上下调基因判断
-significance_level <- 0.05
-log2FC_threshold <- 1
+# 定义阈值
+significance_level <- 0.05  # 设定显著性水平
+log2FC_threshold <- 1       # 设定对数倍数变化的阈值
 
 # 筛选上调基因
 upregulated_genes <- subset(result1, log2FoldChange > log2FC_threshold & padj < significance_level)
-upregulated_genes <- data.frame(upregulated_genes)
+# 从result1中筛选出log2FoldChange大于log2FC_threshold且padj小于significance_level的基因
+upregulated_genes <- data.frame(upregulated_genes)  # 将筛选结果转换为数据框
 
+# 筛选下调基因
+downregulated_genes <- subset(result1, log2FoldChange < -log2FC_threshold & padj < significance_level)
+# 从result1中筛选出log2FoldChange小于-log2FC_threshold且padj小于significance_level的基因
+downregulated_genes <- data.frame(downregulated_genes)  # 将筛选结果转换为数据框
+
+# 处理上下调基因数据
 up <- upregulated_genes
 down <- downregulated_genes
-row_names1 <- rownames(up)
-column_data1 <- up$change
-combined_data1 <-  data.frame(RowName = row_names, ColumnData = column_data1)
-write.table(combined_data1,file = "up.txt",sep = "\t", row.names = FALSE, quote = FALSE)
+up <- mutate(up, gene_symbol = rownames(up))
+down <- mutate(down, gene_symbol = rownames(down))
 
-down <- downregulated_genes
-row_names <- rownames(down)
-column_data2 <- down$change
-combined_data2 <-  data.frame(RowName = row_names, ColumnData = column_data2)
-write.table(combined_data2,file = "down.txt",sep = "\t", row.names = FALSE, quote = FALSE)
+# 将上下调基因数据写入"up""down"文件
+write.table(up$gene_symbol, file = "up.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+write.table(down$gene_symbol, file = "down.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+
+m <- up$gene_symbol
+n <- down$gene_symbol
+
+
 # 合并上调和下调基因数据
-all_genes <- rbind(upregulated_genes, downregulated_genes)
-# 创建包含基因名和方向的新数据框
-combined_data <- data.frame(Gene = rownames(all_genes), Direction = all_genes$direction)
-# 保存到TXT文件
-write.table(combined_data, file = "combined_genes.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+all_genes <- rbind(m, n)
+all_genes <- t(all_genes)
+
+write.table(all_genes, file = "all_genes.txt", sep = "\t", row.names = FALSE, quote = FALSE)
+
 
 #火山图
 result1$change = ifelse(result1$padj < 0.05 & abs(result1$log2FoldChange) >= 1, ifelse(result1$log2FoldChange> 1 ,'Up','Down'),'Stable')
@@ -242,7 +250,7 @@ write.csv(ego_result_CC,file = "ego_result_CC.csv",row.names = T)
 write.csv(ego_result_MF,file = "ego_result_MF.csv",row.names = T)
 write.csv(ego,file = "ego.csv",row.names = T)
 
-display_number = c(22, 22, 22)#这三个数字分别代表选取的BP、CC、MF的通路条数，这个自己设置就行了
+display_number = c(10, 10, 10)#这三个数字分别代表选取的BP、CC、MF的通路条数，这个自己设置就行了
 ego_result_BP <- as.data.frame(GO_BP)[1:display_number[1], ]
 ego_result_CC <- as.data.frame(GO_CC)[1:display_number[2], ]
 ego_result_MF <- as.data.frame(GO_MF)[1:display_number[3], ]
@@ -273,7 +281,7 @@ ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) + #横纵�
   coord_flip() + ##这一步是让柱状图横过来，不加的话柱状图是竖着的
   xlab("GO term") + 
   ylab("Gene_Number") + 
-  labs(title = "The Most Enriched GO Terms")+
+  labs(title = "Top 10 GO terms across BP, CC, and MF")+
   theme_bw()
 
 
@@ -286,7 +294,7 @@ ggplot(data=go_enrich_df, aes(x=type_order,y=GeneNumber, fill=type)) +
   theme_bw() + 
   xlab("GO term") + 
   ylab("Num of Genes") + 
-  labs(title = "The Most Enriched GO Terms")+ 
+  labs(title = "Top 10 GO terms across BP, CC, and MF")+ 
   theme(axis.text.x=element_text(face = "bold", color="gray50",angle = 70,vjust = 1, hjust = 1 ))#angle是坐标轴字体倾斜的角度，可以自己设置
 
 ################KEGG分析##############
@@ -305,14 +313,8 @@ library(clusterProfiler)
 gene <- rownames(DGE)
 gene_symbols <- rownames(result1)
 gene_symbols <- as.character(gene_symbols)
-gene_mapping <- AnnotationDbi::select(org.Hs.eg.db, 
-                                      keys = genes, 
-                                      keytype = "SYMBOL", 
-                                      columns = "ENTREZID")
 
 
-library(AnnotationDbi)
-library(org.Hs.eg.db)
 gene <- rownames(DGE)
 gene <- as.character(rownames(DGE))
 
