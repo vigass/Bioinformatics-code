@@ -52,7 +52,7 @@ table(colnames(exp))
 #建立分组
 group_list <- ifelse(str_detect(pd$`grade:ch1`, "high"), "high",
                      ifelse(str_detect(pd$`grade:ch1`,"intermediate"),"intermediate",
-                     ifelse(str_detect(pd$`grade:ch1`,"low"),"low","NA")))
+                            ifelse(str_detect(pd$`grade:ch1`,"low"),"low","NA")))
 group_list <- factor(group_list, levels = c("high","intermediate","low","NA"))
 ####分组根据pd的description决定###
 
@@ -176,8 +176,12 @@ head(s2e) #打印 s2e 对象的前几行，以查看基因符号到Entrez ID的�
 head(deg) #打印 deg 数据框的前几行，以查看处理前的结果
 deg <- inner_join(deg,s2e,by=c("symbol"="SYMBOL")) #将 deg 数据框和 s2e 对象根据 symbol 列和 SYMBOL 列进行内连接（内部匹配），即将具有相同基因符号的行合并
 head(deg) #查看基因注释后的前几个结果
-save(logFC_t,deg,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
+gene_list <- deg$symbol#储存limma包处理得到的差异Gene
+gene_list <- data.frame(gene_list)
+write.table(gene_list, file = "path/to/your/gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+
+save(logFC_t,deg,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
 ################Step7 可视化######################
 #清除环境变量并加载包
