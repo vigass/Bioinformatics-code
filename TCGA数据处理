@@ -21,7 +21,10 @@ for (i in 1:length(count_file_name)){
   data<- read.delim(path,fill = TRUE,header = FALSE,row.names = 1)
   colnames(data)<-data[2,]
   data <-data[-c(1:6),]
-  data <- data[3] #取出unstranded列（得到COUNT矩阵），若想提取fpkm-unstranded则改为data[7]，fpkm-up-unstranded改为data[8]
+  data <- data[5]
+#取出unstranded列（得到COUNT矩阵，data[5]）
+#若想提取fpkm-unstranded则改为data[7]
+#fpkm-up-unstranded改为data[8]
   colnames(data) <- file_sample$sample_id[which(file_sample$file_name==count_file_name[i])]
   matrix <- cbind(matrix,data)
 }
@@ -33,7 +36,7 @@ data<- as.matrix(read.delim(path,fill = TRUE,header = FALSE,row.names = 1))
 gene_name <-data[-c(1:6),1]
 matrix0 <- cbind(gene_name,matrix)
 #将gene_name列去除重复的基因，保留每个基因最大表达量结果
-matrix0 <- aggregate( . ~ gene_name,data=matrix0, max)    
+matrix0 <- aggregate( . ~ gene_name,data=matrix0, max) #aggregate()函数会自动保留为整数   
 #将gene_name列设为行名
 rownames(matrix0) <- matrix0[,1]
 matrix0 <- matrix0[,-1]
