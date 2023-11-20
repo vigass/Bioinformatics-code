@@ -1,3 +1,4 @@
+rm(list=ls())
 setwd('C:\\Users\\如意\\Desktop\\GIST_GEO')
 rm(list=ls())
 ################Step1 下载GEO数据##################
@@ -10,7 +11,7 @@ BiocManager::install("GEOquery")
 
 #加载GEOquery包
 library(GEOquery)
-gse="GSE31802"
+gse="GSE47911"
 
 #getGEO的第一个参数是GSE序列号，destdir指定了下载的路径('.'代表在当前目录下)
 #getGPL表示是否下载GPL数据
@@ -50,10 +51,8 @@ library(stringr)
 table(colnames(exp))
 
 #建立分组
-group_list <- ifelse(str_detect(pd$`grade:ch1`, "high"), "high",
-                     ifelse(str_detect(pd$`grade:ch1`,"intermediate"),"intermediate",
-                            ifelse(str_detect(pd$`grade:ch1`,"low"),"low","NA")))
-group_list <- factor(group_list, levels = c("high","intermediate","low","NA"))
+group_list <- ifelse(str_detect(pd$title, "GIST"), "GIST","Normal")
+group_list <- factor(group_list, levels = c("GIST","Normal"))
 ####分组根据pd的description决定###
 
 #查看分组信息
@@ -177,9 +176,9 @@ head(deg) #打印 deg 数据框的前几行，以查看处理前的结果
 deg <- inner_join(deg,s2e,by=c("symbol"="SYMBOL")) #将 deg 数据框和 s2e 对象根据 symbol 列和 SYMBOL 列进行内连接（内部匹配），即将具有相同基因符号的行合并
 head(deg) #查看基因注释后的前几个结果
 
-gene_list <- deg$symbol#储存limma包处理得到的差异Gene
-gene_list <- data.frame(gene_list)
-write.table(gene_list, file = "path/to/your/gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+gene_list <- deg[deg$change %in% c("up", "down"), "symbol"]
+gene_list <- data.frame(gene = gene_list)
+write.table(gene_list, file = "C:\\Users\\如意\\Desktop\\GIST_GEO\\2\\gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 
 save(logFC_t,deg,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
