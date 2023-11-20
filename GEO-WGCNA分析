@@ -1,0 +1,401 @@
+setwd("D:\\Datas\\WGCNA") #设定工作目录，路径需修改
+rm(list=ls())
+options(digits=2)
+###############原始数据下载base on R3.5.3###############
+#GEOquery包，此处以数据集GSE3910为例，用getGEOSUppFiles()函数获取原始数据
+library(GEOquery)
+rawdata = getGEOSuppFiles("GSE1402")
+
+###############原始数据读取----ReadAffy()函数
+#使用choose.dir（）函数选择文件夹
+dir <- choose.dir(caption = "Select folder")
+#列出CEL文件，保存到变量
+cel.files <- list.files(path = dir, pattern = ".+\\.cel", ignore.case = TRUE,
+                        
+                        full.names = TRUE, recursive = TRUE)
+#查看文件名
+basename(cel.files)
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("affy")
+library(affy)
+#读入数据
+data.raw <- ReadAffy(filenames = cel.files)
+#读入芯片的默认样品名称是文件名，用sampleNames函数查看并修改：
+sampleNames(data.raw)
+###############样本重命名--使用stri_sub函数删除CEL等，仅保留GSM号
+library(stringi)
+#8或9或10
+sampleNames(data.raw)<-stri_sub(sampleNames(data.raw),1,8)
+sampleNames(data.raw)
+###############下载样本信息，即每个gsm的临床信息
+library(dplyr);
+library(rvest);
+library(stringr)
+getmultiplegsmclin <- function(a){
+  baseurl = "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc="
+  link = paste(baseurl, a, sep ='')
+  con = url(link)
+  htmlCode = readLines(con)
+  clin = read_html(htmlCode[302]) %>%
+    html_nodes("td") %>%
+    html_text()  # 添加这行来提取文本内容
+  
+  clin = str_sub(clin, end=-11)  # 现在clin是字符向量
+  clin = stri_replace_all(clin, replacement=",", regex="<br>")
+  
+  print(paste("writing clin data for", a))
+  write.table(clin, "clin.csv", sep = ",", row.names = a, col.names = F, append = T)
+}
+lapply(sampleNames(data.raw),getmultiplegsmclin)
+##############构建样本分组信息
+group_file=pData(data.raw)
+#group_file$sample=rownames(group_file)
+#根据实际情况修改
+group_file$disease=c(rep(0,time=37),rep(1,time=20))
+#查看分组信息
+group_file
+###############基因芯片数据预处理---质量控制--查找并删除芯片质量差的芯片optional###############
+#质量控制包括：质量分析报告、RLE箱线图、NUSE箱线图、RNA降解图，通过上述分析，进而剔除质量不合格的样本
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("hgu133plus2cdf")
+library(hgu133plus2cdf)
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("hgu133plus2.db")
+library(hgu133plus2.db)
+T##3.2.10 使用 arrayQualityMetrics 包进行质量控制(一键生成所有图)，消耗大量内存
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("arrayQualityMetrics")
+library(arrayQualityMetrics)
+arrayQualityMetrics(expressionset = data.raw,
+                    outdir = "fig",
+                    force = TRUE,
+                    do.logtransform = T)
+dev.off()
+
+###############基因芯片数据预处理：背景校正，标准化，汇总###############
+#option1，如果样本多会消耗大量内存，三合一函数
+#eset.mas<-expresso(afbatch = data.raw,bgcorrect.method = "mas",
+#          normalize.method = "constant",pmcorrect.method ="mas",
+#          summary.method = "mas")
+#option2
+#eset.mas<-justrma(data.raw)
+eset.mas <- mas5(data.raw)
+exprmat=exprs(eset.mas)
+str(exprmat)
+#删除内参探针
+del <- grep("AFFX",rownames(exprmat)) #获取affx的基因名
+exprmat <- exprmat[-del,]
+dim(exprmat)
+#对数据做了归一化处理
+exprmat.quantiles = preprocessCore::normalize.quantiles(exprmat)
+dimnames(exprmat.quantiles)=dimnames(exprmat)
+#求探针表达均值并过滤低表达基因
+expmean=apply(exprmat.quantiles,1,mean)
+sd=apply(exprmat.quantiles,1,sd)
+cv=sd/expmean
+exprmat.quantiles<- exprmat.quantiles[expmean>quantile(expmean,0.25) & cv>quantile(cv,0.25),]
+dim(exprmat.quantiles)
+exprmat.quantiles<- log2(exprmat.quantiles)
+#保存表达矩阵
+#save(dataexp,files="GSE**_exp.RData")
+write.csv(exprmat.quantiles,file="GS42568.csv",quote=F)
+#limma进行差异基因分析
+library(limma)
+Exp <- factor(group_file$disease)
+design <- model.matrix(~ 0+Exp)
+rownames(design)=colnames(exprmat.quantiles)
+#比较应根据实际修改，实验组-对照组
+cont_matrix <- makeContrasts(bc = Exp1-Exp0,levels=design)
+fit <- lmFit(exprmat.quantiles, design)
+fit_contrast <- contrasts.fit(fit, cont_matrix)
+fit_contrast <- eBayes(fit_contrast, trend=TRUE, robust=TRUE)
+results <- decideTests(fit_contrast,p.value = 0.05,lfc = 1.3) #设置p和变化倍数阈值
+summary(results)
+volcanoplot(fit_contrast,coef=1,highlight=10,names=rownames(exprmat.quantiles))
+top_genes <- topTable(fit_contrast, number = 100, adjust = "BH")
+heatmap(exprmat.quantiles[rownames(top_genes),],labRow=F,labCol=F,ColSideColors=c(rep("#FF0000FF",37),rep("#BDFF00FF",20)),distfun=dist, 
+        hclustfun = hclust,main = "blood from HIV resistant and negative women") #热图样本bar需要根据实际情况设置ColSideColors，需根据矩阵样本顺序设定颜色
+DE_genes <- topTable(fit_contrast, number =summary(results)[1]+summary(results)[3], adjust = "BH")
+write.csv(DE_genes,"DE_genes.csv")
+write.csv(exprmat.quantiles[rownames(DE_genes),],"exprSet.significant.csv") #将差异基因保存输出，下面分析可直接读取该文件;
+#exprSet.significant=read.csv("exprSet.significant.csv",header=T) #下次直接读取，进行后面的分析，差异基因一般要求几百或者几千个
+
+#####WGCNA:读取准备数据#####
+library(WGCNA);
+enableWGCNAThreads(2) 
+#memory.limit(6000) #限制占用最大内存数
+options(stringsAsFactors = FALSE);
+dat0=read.csv("exprSet.significant.csv",header=TRUE)  
+datSummary=dat0[,1];
+dim(dat0) #查看数据形状
+datExpr = t(dat0[,2: ncol(dat0)]); #转置表达矩阵
+dim(datExpr)
+  ArrayName= names(data.frame(dat0[,-1])) #列名提取为样本名
+GeneName= dat0[,1] #首列提取为基因名
+names(datExpr)=dat0[,1] #指定datExpr列名
+
+####有trait数据或运行demo数据可以去掉注释#####
+#datTraits=read.csv("trait.csv") #按照NCBI GEO数据集的样本信息构建csv，1列为样本名称，其他为性状及其值，对照可为0，实验组为1
+#table(dimnames(datExpr)[[1]]==datTraits$sample) 
+y=design[,2] #只有1种性状时，有2个的要设置z
+#z=datTraits$age
+#sizeGrWindow(9, 5)
+#pdf("ClusterTreeSamples.pdf")
+#plotClusterTreeSamples(datExpr=datExpr, y=y)
+#dev.off()
+#rm(dat0);
+#gc()
+
+#####WGCNA：进行Power选择#####
+library(WGCNA)
+powers=c(seq(1,10,by=1),seq(12,16,by=2))
+sft=pickSoftThreshold(datExpr, powerVector=powers,networkType = "signed")
+pdf('choosing power.pdf', width = 9, height = 5)
+par(mfrow = c(1,1)); #画布布局，1行1列
+cex1 = 0.9; #power阈值，可减为0.8
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
+     xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",main = paste("Scale independence")) #画图
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],labels=powers,cex=cex1,col="red"); #添加文本
+abline(h=0.90,col="red"); #画高位0.9的水平红色直线
+dev.off() #关闭
+
+# 同上画Mean connectivity对power的函数
+pdf('mean connectivity.pdf', width = 9, height = 5)
+plot(sft$fitIndices[, 1], sft$fitIndices[, 5],
+     xlab = "Soft Threshold (power)", ylab = "Mean Connectivity",
+     main = "Mean connectivity", type = "b", col = "blue", pch = 19)
+text(sft$fitIndices[, 1], sft$fitIndices[, 5], labels = powers, cex = cex1, col = "red")
+dev.off()
+
+#####进行WGCNA#####
+library(WGCNA)
+softPower =14 #参数可改，在上面那power图里曲线平滑时的第一个数，一般不大于12
+Connectivity=softConnectivity(datExpr,corFnc = "cor", corOptions = "use ='p'",power=softPower,type = "signed")
+pdf("scale-free.pdf");
+scaleFreePlot(Connectivity,nBreaks = 10,truncated = FALSE,removeFirst = FALSE, main = "");
+dev.off()
+adjacency = adjacency(datExpr,corFnc = "cor", corOptions = "use ='p'",type = "signed", power = softPower)
+TOM = TOMsimilarity(adjacency,TOMType="signed");
+dissTOM = 1-TOM
+geneTree = hclust(as.dist(dissTOM), method = "average")
+minModuleSize =30; #模块最小基因数，参数可改，模块太少要改小
+dynamicMods = cutreeDynamic(dendro = geneTree, distM = dissTOM,deepSplit = 4, pamRespectsDendro = FALSE,minClusterSize = minModuleSize,cutHeight=0.99); 
+#deepSplit = 0参数可改，0-4越大越敏感，模块数越多，5000个基因一般10-40个模块
+table(dynamicMods)
+dynamicColors = labels2colors(dynamicMods) #模块编号转换为颜色
+table(dynamicColors)
+MEList = moduleEigengenes(datExpr, colors = dynamicMods) #colors = dynamicColors
+MEs = MEList$eigengenes
+MEDiss = 1-cor(MEs);
+METree = hclust(as.dist(MEDiss), method = "average");#
+sizeGrWindow(7, 6)
+plot(METree, main = "Clustering of module eigengenes",xlab = "", sub = "")
+MEDissThres = 0.2
+abline(h=MEDissThres, col = "red")
+merge = mergeCloseModules(datExpr, dynamicMods, cutHeight = MEDissThres, verbose = 3); #合并相似的模块为1个
+mergedColors = merge$colors;
+table(mergedColors)
+mergedMEs = merge$newMEs;
+sizeGrWindow(12, 9)
+pdf("DendroAndColors.pdf")
+plotDendroAndColors(geneTree, cbind(dynamicMods, mergedColors),
+                    c("Dynamic Tree Cut", "Merged dynamic"),
+                    dendroLabels = FALSE, hang = 0.03,addGuide = TRUE, guideHang = 0.05)
+dev.off()
+moduleColors = mergedColors
+MEs = mergedMEs;
+MEDiss = 1-cor(MEs);
+METree = hclust(as.dist(MEDiss), method = "average");#
+pdf("METree.pdf")
+plot(METree, main = "Clustering of module eigengenes",xlab = "", sub = "")
+dev.off()
+nSamples=nrow(datExpr)
+geneModuleMembership = as.data.frame(cor(datExpr, MEs, use = "p")); #计算基因属于某个模块的程度
+MMPvalue = cbind.data.frame(datSummary,corPvalueStudent(as.matrix(geneModuleMembership), nSamples)); #计算其P值
+write.table(data.frame(ArrayName,MEs),"MEs.csv",row.name=F) #输出模块基因表达信息
+kMEdat=data.frame(geneModuleMembership,MMPvalue)
+write.table(data.frame(datSummary,kMEdat),"kME-MMPvalue.csv",row.names=FALSE)
+k.in=intramodularConnectivity(adjacency(datExpr,corFnc = "cor", corOptions = "use ='p'", type = "signed", power = softPower), 
+                              moduleColors,scaleByMax = FALSE)
+
+datout=data.frame(datSummary, colorNEW=moduleColors, k.in) 
+write.table(datout, file="OutputCancerNetwork.csv", sep=",", row.names=F) #输出连接度及模块信息
+hubs  = chooseTopHubInEachModule(datExpr, moduleColors)
+write.csv(data.frame(module=names(hubs),moduleColor=labels2colors(names(hubs)),hub=hubs),"num2color.csv",row.names=F)
+
+#####模块基因功能富集分析#####
+gene=read.csv("OutputCancerNetwork.csv",header=T)
+install.packages("gProfileR")
+library(gProfileR)
+for (i in unique(gene$colorNEW)[unique(gene$colorNEW)>0]){
+  genes=subset(gene$datSummary,gene$colorNEW==i)
+  go=gprofiler(as.vector(genes), 
+               organism = "hsapiens",numeric_ns="ENTREZGENE_ACC")[,-14]
+  write.table(go,"module_enrichment.csv",append =T,row.names=rep(i,nrow(go)),sep=",")}
+
+#####画TOM及热图：可不做#####
+pdf("TOM.pdf")
+TOMplot(dissTOM , geneTree, moduleColors)
+dev.off()
+#画MDS图：可不做
+pdf("MDS.pdf")
+cmd1=cmdscale(as.dist(dissTOM),2)
+par(mfrow=c(1,1))
+plot(cmd1, col=as.character(moduleColors), main="MDS plot",xlab="Scaling Dimension 1",ylab="Scaling Dimension 2")
+dev.off()
+
+#####画module heatmap and the eigengene#####
+library(WGCNA)
+pdf("modheatmap.pdf")
+for (i in unique(moduleColors)[unique(moduleColors)!=0]){
+  ME=MEs[, paste("ME",i, sep="")] #ME是模块的基因表达方向
+  par(mfrow=c(2,1), mar=c(0.3, 5.5, 3, 2))
+  plotMat(t(scale(datExpr[,moduleColors==i ])),nrgcols=30,rlabels=F,rcols=labels2colors(i),main=labels2colors(i), cex.main=2)}
+dev.off()
+pdf("eigenebar.pdf")
+for (i in unique(moduleColors)[unique(moduleColors)!=0]){
+  par(mar=c(5, 4.2, 0, 0.7))
+  barplot(ME, col=i, main="", cex.main=2,ylab="Eigengene expression",xlab=labels2colors(i))}
+dev.off()
+
+#####有性状数据时做，模块基因表达与trait进行关联#####
+signif(cor(y,MEs, use="p"),2)
+p.values = corPvalueStudent(cor(y,MEs, use="p"), nSamples = nSamples) #trait和模块相关分析的P值
+#Measure of module significance as average gene significance
+GS1=as.numeric(cor(y,datExpr, use="p")) #trait和基因表达的相关系数
+GeneSignificance=abs(GS1)
+# Next, module significance is defined as average gene significance.
+ModuleSignificance=tapply(GeneSignificance, moduleColors, mean, na.rm=T) #求模块内GS1的均值
+sizeGrWindow(8,7)
+par(mfrow = c(1,1))
+plotModuleSignificance(GeneSignificance[moduleColors!=0],moduleColors[moduleColors!=0])
+#plot Gene significance (y-axis) vs. intramodular connectivity (x-axis) 画图gene sig和连接度散点
+colorlevels=unique(moduleColors)
+colorlevels=colorlevels[colorlevels!=0]
+sizeGrWindow(9,6)
+par(mfrow=c(2,as.integer(0.5+length(colorlevels)/2)))
+par(mar = c(4,5,3,1))
+for (i in c(1:length(colorlevels)))
+{whichmodule=colorlevels[[i]];
+restrict1 = (moduleColors==whichmodule);
+verboseScatterplot(k.in$kWithin[restrict1],
+                   GeneSignificance[restrict1], col=moduleColors[restrict1],
+                   main=whichmodule,
+                   xlab = "Connectivity", ylab = "Gene Significance", abline = TRUE)
+}
+#Generalizing intramodular connectivity for all genes on the array
+datKME=signedKME(datExpr, MEs, outputColumnName="MM.")
+# Display the first few rows of the data frame
+head(datKME)
+
+#####有性状时做，筛选和性状相关的基因#####
+NS1=networkScreening(y=y, datME=MEs, datExpr=datExpr,oddPower=softPower, 
+                     blockSize=10000, minimumSampleSize=4,addMEy=TRUE, removeDiag=FALSE, weightESy=0.5)
+GeneResultsNetworkScreening=data.frame(GeneName=row.names(NS1), NS1)
+#write.table(GeneResultsNetworkScreening, file="GeneResultsNetworkScreening.csv",row.names=F,sep=",")
+MEsy = data.frame(y, MEs)
+eigengeneSignificance = cor(MEsy, y); #计算模块和性状的相关系数
+eigengeneSignificance[1,1] = (1+max(eigengeneSignificance[-1, 1]))/2
+eigengeneSignificance.pvalue = corPvalueStudent(eigengeneSignificance, nSamples = length(y)) #计算p值
+namesME=names(MEsy)
+# Form a summary data frame
+out1=data.frame(t(data.frame(eigengeneSignificance,eigengeneSignificance.pvalue, namesME, t(MEsy))))
+# Set appropriate row names
+dimnames(out1)[[1]][1]="EigengeneSignificance"
+dimnames(out1)[[1]][2]="EigengeneSignificancePvalue"
+dimnames(out1)[[1]][3]="ModuleEigengeneName"
+dimnames(out1)[[1]][-c(1:3)]=dimnames(datExpr)[[1]]
+# Write the data frame into a file
+write.table(out1, file="MEResultsNetworkScreening.csv", row.names=TRUE, col.names = TRUE, sep=",")
+GeneName=dimnames(datExpr)[[2]]
+GeneSummary=data.frame(GeneName, moduleColors, NS1)
+write.table(GeneSummary, file="GeneSummaryTutorial.csv", row.names=F,sep=",")
+datTraits=data.frame(ArrayName, MEsy)
+dimnames(datTraits)[[2]][2:length(namesME)]=paste("Trait",dimnames(datTraits)[[2]][2:length(namesME)],sep=".")
+write.table(datTraits, file="TraitsTutorial.csv", row.names=F,sep=",")
+#Relationships among the top 30 most significant genes,correlation heatmaps for signed network:
+sizeGrWindow(7,7)
+NS1=networkScreening(y=y, datME=MEs, datExpr=datExpr,oddPower=softPower,
+                     blockSize=10000, minimumSampleSize=4,addMEy=TRUE,
+                     removeDiag=FALSE, weightESy=0.5)
+topList=rank(NS1$p.Weighted,ties.method="first")<=30
+#gene.names= names(datExpr)[topList]
+gene.names=GeneName[topList]
+colnames(datExpr)=GeneName
+# The following shows the correlations between the top genes
+plotNetworkHeatmap(datExpr, plotGenes = gene.names,networkType="signed", useTOM=TRUE,power=softPower, main="signed correlations")
+
+#####自动进行所有模块的输出automatic finish the Cytoscape mods,必须做shiny用#####
+probes = dat0[,1]
+n=length(unique(moduleColors)[unique(moduleColors)!=0])
+pb <- txtProgressBar(min = 0, max = n, style = 3) #添加进度条
+for (p in 1:n) { modules=unique(moduleColors)[unique(moduleColors)!=0][p]
+inModule = is.finite(match(moduleColors,modules));
+modProbes = probes[inModule];
+modTOM = TOM[inModule, inModule];
+dimnames(modTOM) = list(modProbes, modProbes)
+cyt = exportNetworkToCytoscape(modTOM,
+                               edgeFile = paste("CytoscapeInput-edges-", paste(modules, collapse="-"), ".txt", sep=""),
+                               nodeFile = paste("CytoscapeInput-nodes-", paste(modules, collapse="-"), ".txt", sep=""),
+                               weighted = TRUE,threshold = quantile(abs(modTOM),probs=0.8,nodeNames = modProbes ,nodeAttr = moduleColors[inModule]))  
+#threshold can be replaced by quantile(abs(modTOM),probs=0.8)
+setTxtProgressBar(pb, p)}
+close(pb) #关闭进度条
+
+#####有性状数据时做，多个trait和module联系起来#####
+allTraits = read.csv("trait.csv",row.names = 1)
+femaleSamples=rownames(datExpr);
+#traitRows = match(femaleSamples, allTraits$arrayname);
+traitRows=match(femaleSamples, names(allTraits))
+datTraits = allTraits[,1:6];
+nGenes = ncol(datExpr);
+nSamples = nrow(datExpr);
+moduleTraitCor = WGCNA::cor(MEs[names(MEs)!="ME0"], datTraits, use = "p");
+moduleTraitPvalue = corPvalueStudent(moduleTraitCor, nSamples);
+sizeGrWindow(10,6)
+# Will display correlations and their p-values
+textMatrix = paste(signif(moduleTraitCor, 2), "\n(",
+                   signif(moduleTraitPvalue, 1), ")", sep = "");
+dim(textMatrix) = dim(moduleTraitCor)
+par(mar = c(6, 8.5, 3, 3));
+# Display the correlation values within a heatmap plot
+labeledHeatmap(Matrix = moduleTraitCor,#moduleTraitCor
+               # xLabels = names(datTraits),
+               xLabels =names(datTraits), #如果只有1个性状，图比较难看，显示性状与模块的关系
+               yLabels = names(MEs[names(MEs)!="ME0"]),
+               ySymbols = names(MEs[names(MEs)!="ME0"]),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix =textMatrix,#textMatrix
+               setStdMargins = FALSE,
+               cex.text = 1,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+#可以输出热图中的数据，textMatrix可以删去
+out2=data.frame(data.frame(moduleTraitCor,moduleTraitPvalue))
+write.table(out2, file="trait-module relationship.csv", row.names=TRUE, col.names = TRUE, sep=",")
+#cor函数可以有use和method参数的设置 : Missing values present in input data. Consider using use = 'pairwise.complete.obs'.
+#注意：大小写是不同的，特别是文件名等！
+
+###############suvival analysis(optional)##############
+library(tidyverse);
+library(tidytidbits);
+library(survivalAnalysis);
+library(survival);
+library(survminer);
+library(pROC)
+#####Fit survival data using the Kaplan-Meier method
+data=cbind(MEs[names(MEs)!="ME0"],allTraits[,7:10])
+surv_object <- Surv(time = allTraits$overall.survival.time_days, event = allTraits$overall.survival.event)
+pdf("overall_sruvival.pdf")
+for (a in 1:6){
+  group=as.numeric(MEs[,a]>median(unlist(MEs[,a]))) #change a in combine_exp[a,]
+  fit2 <- survfit(surv_object ~ group, data = data)
+  print(ggsurvplot(fit2, data =data, pval = TRUE,risk.table=TRUE, xlab="Time (days)",title=names(data)[a])) #use print
+}
+dev.off()
