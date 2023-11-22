@@ -348,6 +348,7 @@ enrichplot::cnetplot(KEGG,circular=FALSE,colorEdge = TRUE)#circluar为指定是�
 enrichplot::heatplot(KEGG,showCategory = 50)
 
 
+##GSEA分析##（KEGG结果）
 library(clusterProfiler)
 library(enrichplot)
 KEGG2 <- pairwise_termsim(KEGG)
