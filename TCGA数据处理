@@ -341,14 +341,14 @@ barplot(KEGG,showCategory = 40,title = 'KEGG Pathway')
 #点状图
 dotplot(KEGG)
 
-#基因-通路关联网络图
+#基因-通路关联网络图##GSEA分析##
 enrichplot::cnetplot(KEGG,circular=FALSE,colorEdge = TRUE)#circluar为指定是否环化，基因过多时建议设置为FALSE
 
-#基因-通路关联热图
+#基因-通路关联热图##GSEA分析##
 enrichplot::heatplot(KEGG,showCategory = 50)
 
 
-##GSEA分析##（KEGG结果）
+
 library(clusterProfiler)
 library(enrichplot)
 KEGG2 <- pairwise_termsim(KEGG)
