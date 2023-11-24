@@ -1,20 +1,20 @@
 rm(list=ls())
-setwd('C:\\Users\\如意\\Desktop\\SSS')
-load("step3_output.Rdata")
+setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
+load("step3_output.Rdata")#GEO
 library(stringr)
-group_list <- str_split(as.character(pd$title),' ',simplify = T)[,2]
-group_list <- c(rep('Tumor',29),rep('control',5),rep('Tumor',29))
+group_list <- str_split(as.character(pd$source_name_ch1),' ',simplify = T)[,1]
+group_list <- c(rep('PBMC',36),rep('FBMC',21))
 group_list
 
-exp1 <- exp1[,c(1:29,30:34,35:63)]
-group_list <- group_list[c(1:29,30:34,35:63)]
+exp1 <- exp1[,c(1:36,37:57)]
+group_list <- group_list[c(1:36,37:57)]
 suppressMessages(library(limma))
 design <- model.matrix(~0+factor(group_list))
 colnames(design)=levels(factor(group_list))
 rownames(design)=colnames(exp1)
 design <- data.frame(design)
 samples <- design
-
+design
 
 
 library(WGCNA)
@@ -53,7 +53,7 @@ if (!gsg$allOK){
 
 #判断是否有离群样本
 sampleTree = hclust(dist(datExpr1), method = "average")
-par(cex = 0.7);
+par(cex = 0.9);
 par(mar = c(0,4,2,0))
 plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5,
      cex.axis = 1.5, cex.main = 2)
@@ -63,7 +63,7 @@ nSamples = nrow(datExpr)
 
 plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5, cex.axis = 1.5, cex.main = 2) +
   #想用哪里切，就把“h = 110”和“cutHeight = 110”中换成你的cutoff
-  abline(h = 115, col = "red") 
+  abline(h = 800, col = "red") 
 clust = cutreeStatic(sampleTree, cutHeight = 120, minSize = 10)
 keepSamples = (clust==1)
 datExpr = datExpr1[keepSamples, ]
@@ -74,8 +74,14 @@ datExpr=as.data.frame(datExpr)
 ####若去除离群样本，Samples需删掉去除的样本(手动)
 #write.csv(samples,file = "samples1.csv",row.names = T)
 #samples <- read.csv("samples1.csv",header = T,row.names = 1)
+#write.csv(exp1,file = "exp2.csv",row.names = T)
+#exp2 <- read.csv("exp2.csv",header = T,row.names = 1)
+#datExpr0 = data.frame(t(exp2))
+#colnames(datExpr0) <- rownames(exp2)
+#rownames(datExpr0) <- colnames(exp2)
+#datExpr1<-datExpr0
 
-
+library(WGCNA)
 #选择构建网络的合适阈值
 #通过这步计算，找出scale free topology modle fit接近0.9的最小power（soft threshold），用于下一步构建网络。
 powers = c(c(1:10), seq(from = 12, to=20, by=2))
@@ -130,7 +136,7 @@ for (i  in 1:length(text)) {
 moduleLabelsAutomatic = net$colors
 moduleColorsAutomatic = labels2colors(moduleLabelsAutomatic)
 moduleColorsWW = moduleColorsAutomatic
-MEs0 = moduleEigengenes(datExpr, moduleColorsWW)$eigengenes
+MEs0 = moduleEigengenes(datExpr0, moduleColorsWW)$eigengenes
 MEsWW = orderMEs(MEs0)
 modTraitCor = cor(MEsWW,samples, use = "p")
 colnames(MEsWW)
