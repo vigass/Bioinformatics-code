@@ -1,0 +1,30 @@
+rm(list=ls())
+setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
+load("step3_output.Rdata")#GEO
+install.packages('glmnet')
+library(glmnet)
+rt <- exp1
+###构建模型
+set.seed(10)#分好坏，用结果的AUC值验证，AUC>0.6,good
+hubgenes=c("MELK","CENPE","CKS2","ZWINT","TK1","TTK","NDC80","MCM5","RAD51AP1")
+hubgenes_probeID<-ids2$probe_id[match(hubgenes ,ids2$symbol)]
+hubgenes_expression<-exp1[match(hubgenes,rownames (exp1)),]
+x=as.matrix(hubgenes_expression[,c(1:ncol(hubgenes_expression))])
+design=as.data.frame(design)
+y=data.matrix(design$FBMC)
+x=t(x)
+fit=glmnet(x,y,family = "binomial",maxit = 1000)
+plot(fit,xvar="lambda",label = TRUE)
+
+cvfit = cv.glmnet(x,y,family="binomia",maxit = 1000)
+plot(cvfit)
+
+coef=coef(fit,s = cvfit$lambda.min)
+index=which(coef != 0)
+actCoef=coef[index]
+lassoGene=row.names(coef)[index]
+geneCoef=cbind(Gene=lassoGene,Coef=actCoef)#查看模型的相关系数geneCoef
+geneCoef
+
+lassoGene <- lassoGene[-1]
+actCoef<- actCoef[-1]
