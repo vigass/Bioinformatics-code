@@ -25,11 +25,11 @@ rownames(datExpr0) <- colnames(exp1)
 #筛选筛选方差前25%的基因
 datExpr1<-datExpr0
 m.vars=apply(datExpr0,2,var)
-
+expro.upper=datExpr0[,which(m.vars>quantile(m.vars, probs = seq(0, 1, 0.25))[4])]
 #筛选方差前75%的基因1
-expro.upper=datExpr0[,which(m.vars>quantile(m.vars, probs = seq(0, 1, 0.25))[2])]
+#m.vars=apply(datExpr0,1,var)
+#expro.upper=datExpr0[,which(m.vars>quantile(m.vars, probs = seq(0, 1, 0.25))[2])]
 datExpr1<-data.matrix(expro.upper)
-
 #判断是否有不好的sample或gene
 gsg = goodSamplesGenes(datExpr1, verbose = 3)
 gsg$allOK
@@ -63,13 +63,18 @@ nSamples = nrow(datExpr)
 
 plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5, cex.axis = 1.5, cex.main = 2) +
   #想用哪里切，就把“h = 110”和“cutHeight = 110”中换成你的cutoff
-  abline(h = 120, col = "red") 
+  abline(h = 115, col = "red") 
 clust = cutreeStatic(sampleTree, cutHeight = 120, minSize = 10)
 keepSamples = (clust==1)
 datExpr = datExpr1[keepSamples, ]
 nGenes = ncol(datExpr)
 nSamples = nrow(datExpr)
 datExpr=as.data.frame(datExpr)
+
+####若去除离群样本，Samples需删掉去除的样本(手动)
+#write.csv(samples,file = "samples1.csv",row.names = T)
+#samples <- read.csv("samples1.csv",header = T,row.names = 1)
+
 
 #选择构建网络的合适阈值
 #通过这步计算，找出scale free topology modle fit接近0.9的最小power（soft threshold），用于下一步构建网络。
@@ -85,7 +90,7 @@ plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
      main = paste("Scale independence")) +
   text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
        labels=powers,cex=cex1,col="red")+
-  abline(h=0.7,col="red")
+  abline(h=0.9,col="red")
 plot(sft$fitIndices[,1], sft$fitIndices[,5],
      xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
      main = paste("Mean connectivity")) +
@@ -130,6 +135,7 @@ MEsWW = orderMEs(MEs0)
 modTraitCor = cor(MEsWW,samples, use = "p")
 colnames(MEsWW)
 modlues=MEsWW
+
 modTraitP = corPvalueStudent(modTraitCor, nSamples)
 textMatrix = paste(signif(modTraitCor, 2), "\n(", signif(modTraitP, 1), ")", sep = "")
 dim(textMatrix) = dim(modTraitCor)
