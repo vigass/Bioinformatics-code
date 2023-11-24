@@ -46,7 +46,7 @@ load("step2_output.Rdata")
 
 #加载stringr包
 library(stringr)
-
+library(dplyr)
 #查看表达矩阵的列名
 table(colnames(exp))
 
@@ -78,7 +78,7 @@ exp1 <- exp1[,-ncol(exp1)]
 write.csv(exp1, file = "exp1.csv", row.names = FALSE)
 
 #保存上述提取的数据
-save(group_list,ids2,exp,pd,file = "step3_output.Rdata")
+save(group_list,ids2,exp,exp1,pd,file = "step3_output.Rdata")
 
 
 ######################Step5 主成分分析##############
