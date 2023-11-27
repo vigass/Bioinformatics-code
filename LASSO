@@ -1,6 +1,6 @@
 rm(list=ls())
 setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
-load("step3_output.Rdata")#GEO
+load("step_Lasso.Rdata")#GEO
 install.packages('glmnet')
 library(glmnet)
 rt <- exp1
@@ -9,6 +9,9 @@ set.seed(10)#分好坏，用结果的AUC值验证，AUC>0.6,good
 hubgenes=c("MELK","CENPE","CKS2","ZWINT","TK1","TTK","NDC80","MCM5","RAD51AP1")
 hubgenes_probeID<-ids2$probe_id[match(hubgenes ,ids2$symbol)]
 hubgenes_expression<-exp1[match(hubgenes,rownames (exp1)),]
+
+save(exp1,hubgenes,hubgenes_expression,group_list,design,file = "step_ROC.Rdata")
+
 x=as.matrix(hubgenes_expression[,c(1:ncol(hubgenes_expression))])
 design=as.data.frame(design)
 y=data.matrix(design$FBMC)
