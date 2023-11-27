@@ -1,0 +1,69 @@
+rm(list=ls())
+install.packages('pROC')
+library(pROC)
+load("step_ROC.Rdata")
+hubgenes_expression=t(hubgenes_expression)
+par (mfrow=c(3,3))
+for(i in 1:length(hubgenes)){
+  x_color=c("blue", "red", "green", "black", "brown" , "orange","pink" , "cyan", "grey")
+  plot.roc(group_list,hubgenes_expression[i,],main=hubgenes[i],
+           col=x_color[i],print.auc=T,percent=T,cex.lab=1.5,print.auc.cex=1.5)
+}
+roc1<- roc(group_list, hubgenes_expression[1,])
+roc1<- roc(controls=hubgenes_expression[7,][group_list=="control"],
+           cases=hubgenes_expression[7,][group_list=="case"])
+roc2<- roc(group_list, hubgenes_expression[2,])
+roc3<- roc(group_list, hubgenes_expression[3,])
+roc4<- roc(group_list, hubgenes_expression[4,])
+roc5<- roc(group_list, hubgenes_expression[5,])
+roc6<- roc(group_list, hubgenes_expression[6,])
+roc7<- roc(group_list, hubgenes_expression[7,])
+roc8<- roc(group_list, hubgenes_expression[8,])
+roc9<- roc(group_list, hubgenes_expression[9,])
+
+
+plot(roc1,col="red",legacy.axes=T)
+plot(roc2, add=TRUE, col="blue")
+plot(roc3, add=TRUE, col="green")
+plot(roc4, add=TRUE, col="black")
+plot(roc5, add=TRUE, col="brown")
+plot(roc6, add=TRUE, col="orange")
+plot(roc7, add=TRUE, col="pink")
+plot(roc8, add=TRUE, col="cyan")
+plot(roc9, add=TRUE, col="grey")
+
+
+
+
+round(auc(roc1),3)##AUC
+round(ci(roc1),3)##95%CI
+round(auc(roc2),3)##AUC
+round(ci(roc2),3)##95%CI
+round(auc(roc3),3)##AUC
+round(ci(roc3),3)##95%CI
+round(auc(roc4),3)##AUC
+round(ci(roc4),3)##95%CI
+round(auc(roc5),3)##AUC
+round(ci(roc5),3)##95%CI
+round(auc(roc6),3)##AUC
+round(ci(roc6),3)##95%CI
+round(auc(roc7),3)##AUC
+round(ci(roc7),3)##95%CI
+round(auc(roc8),3)##AUC
+round(ci(roc8),3)##95%CI
+round(auc(roc9),3)##AUC
+round(ci(roc9),3)##95%CI
+
+
+legend("bottomright", legend=c("VEGFA-auc0.62","MMP9-auc0.6","TBX21-auc0.609","CCR5-auc0.587","LCN2-auc0.63"),
+       col=c("blue", "red", "green", "black", "brown" , "orange","pink" , "cyan", "grey"),lty=1)
+plot(roc1,
+     add = FALSE,
+     col = 'red', 
+     legacy.axes = TRUE,
+     main="MELK",
+     xlab = "1-Specificity",
+     print.auc =TRUE,
+     print.auc.x = 0.5,
+     print.auc.y = 0.5)
+text(0.4,0.4, "95%CI=0.447-0.991")
