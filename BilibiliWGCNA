@@ -1,6 +1,24 @@
 rm(list=ls())
 setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
 load("step3_output.Rdata")#GEO
+########需要筛选
+library(stringr)
+library(dplyr)
+filtered_pd <- pd %>%
+  filter(source_name_ch1 == "primary GIST", 
+            `primary tumor site:ch1` == "stomach")
+x <- filtered_pd$geo_accession
+exp2 <- t(exp1)
+exp3 <- exp1[match(x,rownames(exp2))]
+
+group_list <- str_split(as.character(filtered_pd$`risk:ch1`),' ',simplify = T)[,2]
+group_list <- c(rep('high',8),rep('intermediate',9),rep('low',16),rep('very low',10))
+group_list
+
+exp1 <- exp3[,c(1:8,9:17,18:33,34:43)]
+group_list <- group_list[c(1:8,9:17,18:33,34:43)]
+
+##########不用筛选
 library(stringr)
 group_list <- str_split(as.character(pd$source_name_ch1),' ',simplify = T)[,1]
 group_list <- c(rep('PBMC',36),rep('FBMC',21))
