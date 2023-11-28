@@ -1,11 +1,10 @@
 rm(list=ls())
-setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
+setwd('D:\\Datas\\test1')
 load("step3_output.Rdata")#GEO
-########需要筛选
 library(stringr)
 library(dplyr)
 filtered_pd <- pd %>%
-  filter(source_name_ch1 == "primary GIST", 
+  filter(source_name_ch1 == "primary GIST",
             `primary tumor site:ch1` == "stomach")
 x <- filtered_pd$geo_accession
 exp2 <- t(exp1)
@@ -18,14 +17,6 @@ group_list
 exp1 <- exp3[,c(1:8,9:17,18:33,34:43)]
 group_list <- group_list[c(1:8,9:17,18:33,34:43)]
 
-##########不用筛选
-library(stringr)
-group_list <- str_split(as.character(pd$source_name_ch1),' ',simplify = T)[,1]
-group_list <- c(rep('PBMC',36),rep('FBMC',21))
-group_list
-
-exp1 <- exp1[,c(1:36,37:57)]
-group_list <- group_list[c(1:36,37:57)]
 suppressMessages(library(limma))
 design <- model.matrix(~0+factor(group_list))
 colnames(design)=levels(factor(group_list))
@@ -81,7 +72,7 @@ nSamples = nrow(datExpr)
 
 plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5, cex.axis = 1.5, cex.main = 2) +
   #想用哪里切，就把“h = 110”和“cutHeight = 110”中换成你的cutoff
-  abline(h = 800, col = "red") 
+  abline(h = 200, col = "red") 
 clust = cutreeStatic(sampleTree, cutHeight = 120, minSize = 10)
 keepSamples = (clust==1)
 datExpr = datExpr1[keepSamples, ]
@@ -91,9 +82,9 @@ datExpr=as.data.frame(datExpr)
 
 ####若去除离群样本，Samples需删掉去除的样本(手动)
 #write.csv(samples,file = "samples1.csv",row.names = T)
+#write.csv(t(exp1),file = "exp2.csv",row.names = T)
 #samples <- read.csv("samples1.csv",header = T,row.names = 1)
-#write.csv(exp1,file = "exp2.csv",row.names = T)
-#exp2 <- read.csv("exp2.csv",header = T,row.names = 1)
+#exp2 <- t(read.csv("exp2.csv",header = T,row.names = 1))
 #datExpr0 = data.frame(t(exp2))
 #colnames(datExpr0) <- rownames(exp2)
 #rownames(datExpr0) <- colnames(exp2)
@@ -104,7 +95,7 @@ library(WGCNA)
 #通过这步计算，找出scale free topology modle fit接近0.9的最小power（soft threshold），用于下一步构建网络。
 powers = c(c(1:10), seq(from = 12, to=20, by=2))
 
-sft = pickSoftThreshold(datExpr, powerVector = powers,
+sft = pickSoftThreshold(datExpr1, powerVector = powers,
                         verbose = 5 )
 pdf("1Threshold.pdf",width = 9, height = 5)
 par(mfrow = c(1,2))
@@ -122,7 +113,8 @@ plot(sft$fitIndices[,1], sft$fitIndices[,5],
 dev.off()
 
 #构建网络，找出gene module
-net = blockwiseModules(datExpr, power = 17,
+datExpr <- datExpr1
+net = blockwiseModules(datExpr0, power = 5,
                        TOMType = "unsigned", minModuleSize = 100,
                        reassignThreshold = 0, mergeCutHeight = 0.25,
                        numericLabels = TRUE, pamRespectsDendro = FALSE,
@@ -159,7 +151,7 @@ MEsWW = orderMEs(MEs0)
 modTraitCor = cor(MEsWW,samples, use = "p")
 colnames(MEsWW)
 modlues=MEsWW
-
+nSamples <- ncol(datExpr)
 modTraitP = corPvalueStudent(modTraitCor, nSamples)
 textMatrix = paste(signif(modTraitCor, 2), "\n(", signif(modTraitP, 1), ")", sep = "")
 dim(textMatrix) = dim(modTraitCor)
