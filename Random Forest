@@ -1,0 +1,31 @@
+rm(list=ls())
+setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
+load("step_Lasso.Rdata")#GEO
+install.packages("randomForset")
+library(randomForest)
+rt <- exp1
+set.seed(10)
+hubgenes=c("THBS1","ITGA2B","CXCL1","SELP","TNF","IL6","PTGS2","MMP2","IL1B","EGR2")
+hubgenes_probeID<-ids2$probe_id[match(hubgenes ,ids2$symbol)]
+hubgenes_expression<-exp1[match(hubgenes,rownames (exp1)),]
+x=as.matrix(hubgenes_expression[,c(1:ncol(hubgenes_expression))])
+design=as.data.frame(design)
+y=data.matrix(design$control)
+y <- as.factor(y)
+x=t(x)
+x <- data.frame(x)
+rfModel <- randomForest(x, y, ntree=500, mtry=2, importance=TRUE, type="classification")
+#使用刚刚构筑好的模型进行预测
+#predictions <- predict(rfModel, xTest)
+importance(rfModel)
+
+library(ggplot2)
+importanceData <- as.data.frame(importance(rfModel))
+importanceData$Gene <- rownames(importanceData)
+ggplot(importanceData, aes(x=reorder(Gene, MeanDecreaseAccuracy), y=MeanDecreaseAccuracy)) +
+  geom_bar(stat="identity") +
+  theme_minimal() +
+  coord_flip() +  # 使条形图水平显示
+  xlab("Gene") +
+  ylab("Mean Decrease in Accuracy") +
+  ggtitle("Importance of Hub Genes in Random Forest Model")
