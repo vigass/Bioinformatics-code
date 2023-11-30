@@ -28,6 +28,7 @@ samples <- design
 design
 write.csv(design, file = "group.csv", row.names = T)
 group <- read.csv("group.csv")
+exp1 = t(exp1)
 save(exp1,design,ids2,group,group_list,file = "step_Lasso.Rdata")
 
 library(WGCNA)
