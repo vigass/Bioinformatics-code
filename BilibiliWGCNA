@@ -32,7 +32,7 @@ exp1 = t(exp1)
 save(exp1,design,ids2,group,group_list,file = "step_Lasso.Rdata")
 
 library(WGCNA)
-datExpr0 <- data.frame(t(exp1))
+datExpr0 <- data.frame(exp1)
 colnames(datExpr0) <- rownames(exp1)
 rownames(datExpr0) <- colnames(exp1)
 
@@ -86,7 +86,7 @@ datExpr=as.data.frame(datExpr)
 
 ####若去除离群样本，Samples需删掉去除的样本(手动)
 #write.csv(samples,file = "samples1.csv",row.names = T)
-#write.csv(t(exp1),file = "exp2.csv",row.names = T)
+#write.csv(exp1,file = "exp2.csv",row.names = T)
 #samples <- read.csv("samples1.csv",header = T,row.names = 1)
 #exp2 <- t(read.csv("exp2.csv",header = T,row.names = 1))
 #datExpr0 = data.frame(t(exp2))
