@@ -1,26 +1,28 @@
 rm(list=ls())
-setwd('D:\\Datas\\test1')
+setwd('D:\\JIA')
 load("step3_output.Rdata")#GEO
 library(stringr)
 library(dplyr)
 filtered_pd <- pd %>%
-  filter(source_name_ch1 == "primary GIST",
-            `primary tumor site:ch1` == "stomach")
+  filter(source_name_ch1 == "PBMC",
+         description %in% c("PBMC isolated by Ficoll gradient centrifugation from polyaticular course JRA patient",
+                            "PBMC isolated by Ficoll gradient centrifugation from control"))
 x <- filtered_pd$geo_accession
 exp2 <- t(exp1)
-exp3 <- exp1[match(x,rownames(exp2))]
+exp2 <- exp1[match(x,rownames(exp2))]
 
-group_list <- str_split(as.character(filtered_pd$`risk:ch1`),' ',simplify = T)[,2]
-group_list <- c(rep('high',8),rep('intermediate',9),rep('low',16),rep('very low',10))
+
+group_list <- str_split(as.character(filtered_pd$description),' ',simplify = T)[,8]
+group_list <- c(rep('polyaticular',15),rep('control',11))
 group_list
 
-exp1 <- exp3[,c(1:8,9:17,18:33,34:43)]
-group_list <- group_list[c(1:8,9:17,18:33,34:43)]
+exp1 <- exp2[,c(1:15,16:26)]
+group_list <- group_list[c(1:15,16:26)]
 
 suppressMessages(library(limma))
 design <- model.matrix(~0+factor(group_list))
 colnames(design)=levels(factor(group_list))
-rownames(design)=colnames(exp1)
+rownames(design)=colnames(exp2)
 design <- data.frame(design)
 samples <- design
 design
@@ -29,12 +31,11 @@ group <- read.csv("group.csv")
 save(exp1,design,ids2,group,group_list,file = "step_Lasso.Rdata")
 
 library(WGCNA)
-datExpr0 = data.frame(t(exp1))
+datExpr0 <- data.frame(t(exp1))
 colnames(datExpr0) <- rownames(exp1)
 rownames(datExpr0) <- colnames(exp1)
 
 #筛选筛选方差前25%的基因
-datExpr1<-datExpr0
 m.vars=apply(datExpr0,2,var)
 expro.upper=datExpr0[,which(m.vars>quantile(m.vars, probs = seq(0, 1, 0.25))[4])]
 #筛选方差前75%的基因1
@@ -116,7 +117,7 @@ dev.off()
 
 #构建网络，找出gene module
 datExpr <- datExpr1
-net = blockwiseModules(datExpr0, power = 5,
+net = blockwiseModules(datExpr1, power = 5,
                        TOMType = "unsigned", minModuleSize = 100,
                        reassignThreshold = 0, mergeCutHeight = 0.25,
                        numericLabels = TRUE, pamRespectsDendro = FALSE,
