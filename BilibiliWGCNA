@@ -24,7 +24,9 @@ rownames(design)=colnames(exp1)
 design <- data.frame(design)
 samples <- design
 design
-save(exp1,design,ids2,group_list,file = "step_Lasso.Rdata")
+write.csv(design, file = "group.csv", row.names = T)
+group <- read.csv("group.csv")
+save(exp1,design,ids2,group,group_list,file = "step_Lasso.Rdata")
 
 library(WGCNA)
 datExpr0 = data.frame(t(exp1))
