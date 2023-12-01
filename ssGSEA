@@ -1,0 +1,142 @@
+rm(list=ls())
+setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
+load("step_Lasso.Rdata")#GEO
+#####ssGSEA
+#Step1 heatmap
+library(GSEABase)
+library(GSVA)
+library(dplyr)
+library(tibble)
+library(tidyverse)
+library(ggpubr)
+exp1 <- t(exp1)
+geneSet <- read.csv("geneSet.csv",header = T) 
+class(geneSet)
+geneSet <- data.frame(geneSet)
+geneSet <- geneSet %>%
+  column_to_rownames("X1")%>%t()
+a <- geneSet
+set <- colnames(a)
+l <- list()
+#i <- "Activated CD8 T cell"
+for (i in set) {
+  x <-  as.character(a[,i])
+  x <- x[nchar(x)!=0]
+  x <-  as.character(x)
+  l[[i]] <-x
+}
+
+exp1=as.matrix(exp1)
+
+#开始进行ssGSEA
+library(GSVA)
+ssgsea <- gsva(exp1, l, method="ssgsea", kcdf="Gaussian", abs.ranking=TRUE)
+ssgsea.1 <- ssgsea
+for (i in colnames(ssgsea)) {
+  #i <- colnames(ssgsea)[1]
+  ssgsea.1[,i] <- (ssgsea[,i] -min(ssgsea[,i]))/(max(ssgsea[,i] )-min(ssgsea[,i] ))
+}
+apply(ssgsea.1[,1:6], 2, range)
+
+library(pheatmap)
+library(stringr)
+annotation_col = data.frame(group_list)
+rownames(annotation_col)=colnames(exp1)
+colnames(annotation_col)[1]<-"group"
+
+p=pheatmap(
+  ssgsea,
+  border_color = NA,
+  cluster_rows = T,cluster_cols = F,
+  color = colorRampPalette(colors = c("blue","white","tomato"))(100),
+  labels_row = NULL,
+  annotation_col = annotation_col,
+  clustering_method = "ward.D2",
+  fontsize_col = 3,
+  cutree_cols = 2,
+  show_rownames = T,
+  show_colnames = F,
+)
+
+#Step2 boxplot
+y=t(ssgsea.1)
+####write.csv(design, file = "group.csv", row.names = T)
+group <- read.csv("group.csv")
+data <- cbind(y,group)
+data <-data[,c(29,30,1:28)]
+data=pivot_longer(data=data,
+                  cols = 3:30,
+                  names_to = "celltype",
+                  values_to = "proportion")
+
+ggboxplot(data = data ,
+          x ="celltype",#籍形图中的分组变量
+          y ="proportion",#会制箱形图的响应变量。
+          combine = TRUE,#是否将数据合并为一个箱形图
+          merge = FALSE,#是香将相同值的分组合并。
+          color ="black",#箱形图边框的颜色。
+          fill ="group",#形图填充色
+          palette = c("#1C3EDF","#DF1C26"),
+          title = NULL,#图形标题。
+          xlab ="ssGSEA",#x 标签
+          ylab ="Expression",#y 抽标签
+          bxp.errorbar = FALSE,#是否在箱形图中会制误差务
+          bxp.errorbar.width = 0.2,#误差务密度。
+          facet.by = NULL,#基于哪些变量进行分面
+          panel.labs = NULL,#分面的
+          short.panel.labs = TRUE,
+          linetype ="solid",#线务
+          size = NULL,#产图形大小奔箱形图的宽度
+          widthnotch= FALSE,#产是否在箱形
+          outlier.shape = 20,#异常
+          select = NULL,#要绘制的变量
+          remove = NULL,#产不要绘制的变最。
+          order = NULL,#籍形图的排序方式。",#如何会制误差，可以是
+          error.plot = "pointrange",
+          label = NULL,#产要添加的标签
+          font.label = list(size = 12,color ="black"),
+          label.select = NULL,#产要添加标签的数据点
+          repel = TRUE,
+          label.rectangle = TRUE, 
+          ggtheme = theme_pubr())+ 
+  theme(axis.text.x = element_text(angle = 90,hjust = 1,vjust = 1)) + 
+  stat_compare_means(label = "p.signif",method = "t.test",ref.group= ".all.",hide.ns = F,
+                     symnum.args=list(cutpoints = c(0,0.001,0.01,0.05,1),symbols = c("***","**","*","ns")))
+
+#Step3 spearmanplot
+sig_gene <- c( "HSP90AA1","INS","CD4","PTEN","HDAC1")
+install.packages('ggcorrplot')
+library(psych)
+x <- exp1
+x <- x[,sig_gene]
+y <- t(ssgsea.1)
+library(psych)
+d <- corr.test(x,y,use="complete",method = 'spearman')
+r <- d$r
+p <- d$p
+
+library(ggcorrplot)
+ggcorrplot(t(d$r), 
+           show.legend = T, 
+           digits = 2,  sig.level = 0.05,
+           insig = 'blank',lab = T)+coord_flip() 
+library(pheatmap)
+library(reshape2)
+
+if (!is.null(p)){
+  ssmt <- p< 0.001
+  p[ssmt] <-'***'
+  smt <- p >0.001& p < 0.01
+  p[ssmt] <-'**'
+  smt <- p >0.01& p <0.05
+  p[smt] <- '*'
+  p[!ssmt&!smt]<- ''
+} else {
+  p <- F
+}
+mycol<-colorRampPalette(c("blue","white","tomato"))(100)
+pheatmap(r,scale = "none",cluster_row = T, cluster_col = T, border=NA,
+         display_numbers = p,fontsize_number = 12, number_color = "white",
+         cellwidth = 20, cellheight =20,color=mycol)
+
+
