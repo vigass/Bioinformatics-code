@@ -1,0 +1,136 @@
+#参考https://www.jianshu.com/p/27269f95d9c1
+setwd("D:\\Datas\\Methylation\\ESCA")
+rm(list = ls())
+library(ChAMP)
+library(dplyr)
+library(tibble)
+load('ESCA_29paired_methydata_ChAMPfiltered.Rdata')
+QC = champ.QC(beta = myLoad$beta, pheno = myLoad$pd$sample_type)
+myNorm <- champ.norm(beta=myLoad$beta,arraytype="450K")
+dim(myNorm)
+num.na <- apply(myNorm,2,function(x)(sum(is.na(x))))
+table(num.na)
+library(stringr)
+names(num.na) = colnames(myNorm)
+dt = names(num.na[num.na>0])
+dn = str_replace(dt,"-01","-11")
+keep = setdiff(colnames(myNorm),c(dt,dn)) #只取colnames(myNorm)里的元素
+myNorm = myNorm[,keep]
+dim(myNorm)
+pd = myLoad$pd
+pd <- pd[pd$sample_submitter_id %in% colnames(myNorm),]
+dim(pd)
+
+#主成分分析
+library(FactoMineR)
+library(factoextra) 
+dat <- t(myNorm)
+group_list=pd$sample_type
+table(group_list)
+
+dat.pca <- PCA(dat, graph = FALSE) 
+fviz_pca_ind(dat.pca,
+               geom.ind = "point", 
+               col.ind = group_list, 
+               addEllipses = TRUE, 
+               legend.title = "Groups")
+
+#热图
+cg=names(tail(sort(apply(myNorm,1,sd)),1000))
+library(pheatmap)
+ac=data.frame(group=group_list)
+rownames(ac)=colnames(myNorm)  
+pheatmap(myNorm[cg,],show_colnames =F,show_rownames = F,
+           annotation_col=ac)
+
+#相关关系矩阵热图
+pheatmap::pheatmap(cor(myNorm[cg,]),
+                   annotation_col = ac,
+                   show_rownames = F,
+                   show_colnames = F)
+
+#去除异常值
+#pn = c("TCGA-V5-AASX-11","TCGA-V5-A7RE-11")
+#drop = str_sub(colnames(myNorm),1,12) %in% str_sub(pn,1,12)
+#table(drop)
+#dim(myNorm)
+#pd = pd[!(pd$case_submitter_id %in% str_sub(pn,1,12)),]
+#save(pd,myNorm,file = "ESCA_26paired_after_ChAMP_norm.Rdata")
+
+#差异分析
+#甲基化位点差异分析
+library(ChAMP)
+library(tibble)
+x <- pd$sample_type
+#先把样品分类的名称改一下，中间有空格下面运行会报错
+x[which(x=="Primary Tumor")] <- "Tumor"
+x[which(x=="Solid Tissue Normal")] <- "Normal"
+pd$sample_type = x
+group_list <- pd$sample_type
+
+#利用ChAMP找出差异甲基化位点
+myDMP <- champ.DMP(beta = myNorm,pheno=group_list)
+head(myDMP$Tumor_to_Normal) #差异甲基化位点结果，你会发现这个结果里基因名都给你标好了
+df_DMP <- myDMP$Tumor_to_Normal
+#取基因名不为空白的行
+df_DMP=df_DMP[df_DMP$gene!="",]
+logFC_t <- 0.3#自取
+P.Value_t <- 10^-5#自取
+df_DMP$change <- ifelse(df_DMP$adj.P.Val < P.Value_t & abs(df_DMP$logFC) > logFC_t,
+                          ifelse(df_DMP$logFC > logFC_t ,'UP','DOWN'),'NOT') 
+table(df_DMP$change) 
+
+save(df_DMP,file = "ESCA_DF_methy.Rdata")
+
+#火山图
+library(dplyr)
+library(ggplot2)
+dat  = rownames_to_column(df_DMP)
+for_label <- dat%>% head(3)
+p <- ggplot(data = dat, 
+            aes(x = logFC, 
+                y = -log10(adj.P.Val))) +
+geom_point(alpha=0.4, size=3.5, 
+            aes(color=change)) +
+  ylab("-log10(Pvalue)")+
+  scale_color_manual(values=c("green", "grey","red"))+
+  geom_vline(xintercept=c(-logFC_t,logFC_t),lty=4,col="black",lwd=0.8) +
+  geom_hline(yintercept = -log10(P.Value_t),lty=4,col="black",lwd=0.8) +
+  theme_bw()
+p
+
+#热图
+cg <-  rownames(df_DMP[df_DMP$change != "NOT",])
+plot_matrix <- myNorm[cg,]
+annotation_col <- data.frame(Sample=pd$sample_type) 
+rownames(annotation_col) <- colnames(plot_matrix)
+ann_colors = list(Sample = c(Normal="#4DAF4A", Tumor="#E41A1C"))
+
+library(pheatmap)
+pheatmap(plot_matrix,show_colnames = T,
+           annotation_col = annotation_col,
+           border_color=NA,
+           color = colorRampPalette(colors = c("white","navy"))(50),
+           annotation_colors = ann_colors,show_rownames = F)
+#内置GUI
+#DMP.GUI(DMP=myDMP[[1]],beta=myNorm,pheno=group_list)
+
+#甲基化差异片段分析
+#还可以利用ChAMP找出差异甲基化片段（DMR,Differential Methylation Regions),但目前只支持两组样品进行分析
+myDMR <- champ.DMR(beta=myNorm,pheno=group_list,method="Bumphunter")
+head(myDMR$BumphunterDMR)
+DMR.GUI(DMR=myDMR,beta=myNorm,pheno=group_list)
+
+#GSEA分析
+myGSEA <- champ.GSEA(beta=myNorm,
+                     DMP=myDMP[[1]],
+                     DMR=myDMR,
+                     CpGlist=NULL,
+                     Genelist=NULL,
+                     pheno=group_list,
+                     method="fisher",
+                     arraytype="450K",
+                     Rplot=TRUE,
+                     adjPval=0.01)
+str(myGSEA)
+save(myDMP,myDMR,myGSEA,file = "ChAMP_DMP_DMR_GSEA.Rdata")
