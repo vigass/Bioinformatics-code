@@ -1,0 +1,171 @@
+#参考自https://www.jianshu.com/p/1ceace2b581c
+setwd("D:\\Datas\\Methylation\\ESCA")
+rm(list = ls())
+#先读取sample.tsv文件
+pd.all <- read.delim("sample.tsv", header = T, stringsAsFactors = F)
+dim(pd.all) #你会发现虽然下载页面介绍只有528个病人，但是这里的样品信息有1573个，说明每个病人的取样不止1次，后面要删掉
+colnames(pd.all) #所有的临床信息，我们并不需要所有的
+#提取部分临床信息
+pd <- pd.all[,c("case_id","case_submitter_id","sample_submitter_id","sample_type")]
+table(pd$sample_type)  #看一下样品的类型，这里有4种，只取后面的两种，即只取实体组织
+#这里看到原位肿瘤有978个样品，远远超过了528个病人的数量，再一次验证了存在同一个病人多次取样的情况
+tissue = c("Primary Tumor","Solid Tissue Normal") #取后面两种样品类型
+pd_tissue <- pd[pd$sample_type %in% tissue,] #从所有的临床信息里提取我们要的两种类型的信息
+table(pd_tissue$sample_type)
+table(pd_tissue$case_submitter_id) #查看case_submitter_id（例如：TCGA-CQ-A4CE）分别出现了几次
+#结果里有1,2,3。
+#首先我们要先去掉1的那些样品，因为这些样品一定不是配对的。
+#删除在case_submitter_id（例如：TCGA-CQ-A4CE）里只出现过一次的行
+#代码参考：https://blog.csdn.net/dingchenxixi/article/details/50865277
+deleteuniquelines <- function(x) {# x为输入的数据框
+stand.col <- x$case_submitter_id 
+count <- table(stand.col) #table函数可以得到每个上述列每个数所出现的频数
+if (all(count < 2)) stop("no repeated records") 
+else {
+  ind <- sapply(stand.col, function(t) ifelse(count[as.character(t)] > 1, TRUE, FALSE))
+}
+return(x[ind, ])
+}
+pd_tissue_filtered = deleteuniquelines(pd_tissue)
+dim(pd_tissue_filtered) #过滤完不配对的样品，还剩982个，但这里面不是全配对的，有的是同一个肿瘤样品取了两次
+#分别提取正常和肿瘤组织样品
+nt = pd_tissue_filtered[pd_tissue_filtered$sample_type =="Solid Tissue Normal",]
+tt = pd_tissue_filtered[pd_tissue_filtered$sample_type =="Primary Tumor",]
+#对于正常组织，由于都只取了一次样品，所以不进行过滤
+#对于肿瘤样品：只取tt里sample_submitter_id编码最后一位是"A"的样品，因为B是福尔马林固定石蜡包埋组织
+#从B以后就不太好了，如果你table一下会发现还有Z，所以只取A的样品
+tt <- tt[substr(tt$sample_submitter_id,16,16) =="A",]
+#取和正常对照匹配的肿瘤样品
+tt <- tt[tt$case_submitter_id %in% nt$case_submitter_id,]
+dim(tt)
+#合并正常和肿瘤样品
+paired_tissue <- rbind(nt,tt)
+dim(paired_tissue)
+#读取“clinical.tsv”文件，提取肿瘤位置信息
+tumor_site <-read.delim("clinical.tsv",header = T,stringsAsFactors = F)
+#这里需要注意的是，临床样品里有两列分别是“取样位置”和“肿瘤发生位置”，你要取的是“肿瘤发生的位置”
+tumor_site <- tumor_site[,c("case_id","case_submitter_id","tissue_or_organ_of_origin")]
+library(stringr)
+tumor_site[, c("anatomic_neoplasm_subdivision", "takeout")] <- str_split_fixed(tumor_site$tissue_or_organ_of_origin, ",", 2)
+tumor_site <- tumor_site[,c(1,2,4)]
+table(tumor_site$anatomic_neoplasm_subdivision) #看一下所有的肿瘤位置信息
+ESCA = c("Cardia",
+         "Esophagus",
+         "Lower third of esophagus",
+         "Middle third of esophagus",
+         "Thoracic esophagus",
+         "Upper third of esophagus")
+tumor_site <- tumor_site[tumor_site$anatomic_neoplasm_subdivision %in% ESCA,]
+dim(tumor_site) #我们取的肿瘤发生在口腔里的样品有528个
+tumor_site_unique <- unique(tumor_site$case_submitter_id) #取“肿瘤位置”矩阵里出现过的样品
+tumor_site_unique = as.data.frame(tumor_site_unique)
+colnames(tumor_site_unique) = "case_submitter_id"
+#把“肿瘤位置”里的样品匹配到“配对肿瘤/正常”样品里
+merge_info <- paired_tissue[paired_tissue$case_submitter_id %in% tumor_site_unique$case_submitter_id,]
+dim(merge_info) #这里有36对样品
+methy_data <- data.table::fread("HumanMethylation450",data.table = F)
+methy_data[1:4,1:4]
+merge_info$sample_submitter_id = substr(merge_info$sample_submitter_id,1,15)
+head(merge_info)
+write.table(merge_info$sample_submitter_id, file = "paired_samples_name_from_clinical.txt",
+            quote = F, row.names = F, col.names = F)
+#读取甲基化矩阵，这个矩阵很大，需要fread读取
+methy_data <- data.table::fread("HumanMethylation450",data.table = F)
+methy_data[1:4,1:4]
+#将上面36对样品的肿瘤和正常分别提取出来
+nt_paired = merge_info[merge_info$sample_type=="Solid Tissue Normal",]
+tt_paired = merge_info[merge_info$sample_type=="Primary Tumor",]
+#与甲基化信号矩阵进行匹配
+methy_nt = methy_data[,colnames(methy_data) %in% nt_paired$sample_submitter_id] #甲基化矩阵里只有29个正常样品和临床信息配对
+methy_tt = methy_data[,colnames(methy_data) %in% tt_paired$sample_submitter_id] #甲基化矩阵里有36个肿瘤样品，和临床信息相符
+#匹配后合并肿瘤与正常样品
+methy_combine = cbind(methy_nt,methy_tt)
+table(colnames(methy_combine)) #这里并不是每一个肿瘤样品都匹配一个正常对照，所以我们要把多余的肿瘤样品去掉
+#你会发现最后7个样品并不是配对的，我们需要把它们删掉
+
+#把只出现过一次列名的列去掉
+deleteuniquecolumn <- function(x) {# x为输入的数据框
+m = substr(colnames(x),1,12)
+stand.col <- m 
+count <- table(stand.col) #table函数可以得到每个上述列每个数所出现的频数
+if (all(count < 2)) stop("no repeated records") 
+else {
+ind <- sapply(stand.col, function(t) ifelse(count[as.character(t)] > 1, TRUE, FALSE))
+}
+return(x[,ind])
+}
+methy_paired = deleteuniquecolumn(methy_combine)
+table(colnames(methy_paired))
+rownames(methy_paired) = methy_data$sample
+#保存过滤完样品的甲基化矩阵
+write.csv(methy_paired,file="ESCA_29paired_methydata.csv")
+#读取甲基化矩阵，这个矩阵很大，需要fread读取
+methy_data <- data.table::fread("HumanMethylation450",data.table = F)
+methy_data[1:4,1:4]
+#将上面36对样品的肿瘤和正常分别提取出来
+nt_paired = merge_info[merge_info$sample_type=="Solid Tissue Normal",]
+tt_paired = merge_info[merge_info$sample_type=="Primary Tumor",]
+#与甲基化信号矩阵进行匹配
+methy_nt = methy_data[,colnames(methy_data) %in% nt_paired$sample_submitter_id] #甲基化矩阵里只有29个正常样品和临床信息配对
+methy_tt = methy_data[,colnames(methy_data) %in% tt_paired$sample_submitter_id] #甲基化矩阵里有36个肿瘤样品，和临床信息相符
+#匹配后合并肿瘤与正常样品
+methy_combine = cbind(methy_nt,methy_tt)
+table(colnames(methy_combine)) #这里并不是每一个肿瘤样品都匹配一个正常对照，所以我们要把多余的肿瘤样品去掉
+#你会发现最后7个样品并不是配对的，我们需要把它们删掉
+#把只出现过一次列名的列去掉
+deleteuniquecolumn <- function(x) {# x为输入的数据框
+m = substr(colnames(x),1,12)
+stand.col <- m 
+count <- table(stand.col) #table函数可以得到每个上述列每个数所出现的频数
+if (all(count < 2)) stop("no repeated records") 
+else {
+  ind <- sapply(stand.col, function(t) ifelse(count[as.character(t)] > 1, TRUE, FALSE))
+}
+return(x[,ind])
+}
+methy_paired = deleteuniquecolumn(methy_combine)
+table(colnames(methy_paired))
+rownames(methy_paired) = methy_data$sample
+#保存过滤完样品的甲基化矩阵
+write.csv(methy_paired,file="ESCA_29paired_methydata.csv")
+#读取上面保存的29对样品甲基化信号矩阵
+methy = data.table::fread("ESCA_29paired_methydata.csv",data.table = F)
+head(methy)
+#载入需要的包
+library(ChAMP)
+library(dplyr)
+library(tibble)
+library(impute)
+
+#把myNorm里的列名按照pd里的sample_submitter_id顺序排
+methy_sort <- methy[,c("V1","TCGA-L5-A43C-11","TCGA-L5-A43C-01","TCGA-L5-A4OH-11",
+                       "TCGA-L5-A4OH-01","TCGA-L5-A4OE-11","TCGA-L5-A4OE-01","TCGA-L5-A4ON-11",
+                       "TCGA-L5-A4ON-01","TCGA-L5-A4OQ-11","TCGA-L5-A4OQ-01","TCGA-L5-A4OI-11",
+                       "TCGA-L5-A4OI-01","TCGA-L5-A4OF-11","TCGA-L5-A4OF-01","TCGA-L5-A4OJ-11",
+                       "TCGA-L5-A4OJ-01","TCGA-L5-A4OM-11","TCGA-L5-A4OM-01","TCGA-L5-A4OP-11",
+                       "TCGA-L5-A4OP-01","TCGA-V5-A7RE-11","TCGA-V5-A7RE-01","TCGA-IG-A3I8-11",
+                       "TCGA-IG-A3I8-01","TCGA-L5-A4OG-11","TCGA-L5-A4OG-01","TCGA-V5-AASX-11",
+                       "TCGA-V5-AASX-01","TCGA-IC-A6RF-11","TCGA-IC-A6RF-01","TCGA-IC-A6RE-11",
+                       "TCGA-IC-A6RE-01")]
+
+a = column_to_rownames(methy_sort,"V1")
+beta_value = as.matrix(a)
+# beta信号值矩阵里面不能有NA值
+beta=impute.knn(beta_value) 
+sum(is.na(beta)) #这里是检查矩阵里是否还有NA
+#[1] 0
+beta=beta$data
+beta=beta+0.00001
+#准备pd表型文件（实际上就是样品的信息）
+pd_1 <- as.data.frame(colnames(beta))
+pd_info <- merge_info[merge_info$sample_submitter_id %in% pd_1$`colnames(beta)`,]
+colnames(pd_1) = "sample_submitter_id"
+pd <- merge(pd_1,pd_info,by = "sample_submitter_id",all.x = TRUE)
+#使用ChAMP过滤
+myLoad=champ.filter(beta = beta ,pd = pd) #这一步已经自动完成了过滤
+dim(myLoad$beta) #beta就是指的是beta值，我们需要的甲基化信号
+#[1] 412481     58
+#保存这个ChAMP对象
+save(myLoad,file = 'ESCA_29paired_methydata_ChAMPfiltered.Rdata')
+
+
