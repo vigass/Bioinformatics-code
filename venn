@@ -1,0 +1,56 @@
+rm(list=ls())
+setwd('D:\\Datas\\DEGs')
+install.packages("VennDiagram")
+install.packages("openxlsx")
+library (VennDiagram)  
+library(openxlsx)
+m <- read.xlsx("degs$ME.xlsx")
+m$DEGs[is.na(m$DEGs)] <- ""  # 将DEGs列中的NA替换为空字符串
+m$MEtan[is.na(m$MEtan)] <- ""  # 将MEtan列中的NA替换为空字符串
+
+x <- m$DEGs
+y <- m$MEtan
+
+venn.diagram(x=list(x,y),
+             scaled = F, # 根据比例显示大小
+             alpha= 0.5, #透明度
+             lwd=1,lty=1,col=c('#FFFFCC','#CCFFFF'), #圆圈线条粗细、形状、颜色；1 实线, 2 虚线, blank无线条
+             label.col ='black' , # 数字颜色abel.col=c('#FFFFCC','#CCFFFF',......)根据不同颜色显示数值颜色
+             cex = 2, # 数字大小
+             fontface = "bold",  # 字体粗细；加粗bold
+             fill=c('#FFFFCC','#CCFFFF'), # 填充色 配色https://www.58pic.com/
+             category.names = c("DEGs", "MEtan") , #标签名
+             cat.dist = 0.02, # 标签距离圆圈的远近
+             cat.pos = -180, # 标签相对于圆圈的角度cat.pos = c(-10, 10, 135)
+             cat.cex = 2, #标签字体大小
+             cat.fontface = "bold",  # 标签字体加粗
+             cat.col='black' ,   #cat.col=c('#FFFFCC','#CCFFFF',.....)根据相应颜色改变标签颜色
+             cat.default.pos = "outer",  # 标签位置, outer内;text 外
+             output=TRUE,
+             filename='Venn.png',# 文件保存
+             imagetype="png",  # 类型（tiff png svg）
+             resolution = 400,  # 分辨率
+             compression = "lzw"# 压缩算法
+)
+
+# 交集
+intersection <- intersect(x, y)
+# 仅在DEGs中
+unique_DEGs <- setdiff(x, y)
+# 仅在MEtan中
+unique_MEtan <- setdiff(y, x)
+# 最长列表的长度
+max_length <- max(length(unique_DEGs), length(intersection), length(unique_MEtan))
+# 将所有列表扩展到相同的长度
+unique_DEGs <- c(unique_DEGs, rep(NA, max_length - length(unique_DEGs)))
+intersection <- c(intersection, rep(NA, max_length - length(intersection)))
+unique_MEtan <- c(unique_MEtan, rep(NA, max_length - length(unique_MEtan)))
+# 创建数据框架
+venn_results <- data.frame(
+  DEGs_Only = unique_DEGs,
+  Intersection = intersection,
+  MEtan_Only = unique_MEtan,
+  stringsAsFactors = FALSE  # 防止字符向量被转换为因子
+)
+# 写入CSV文件
+write.csv(venn_results, "venn_results.csv", row.names = FALSE, na = "")
