@@ -1,48 +1,217 @@
-library(multtest)
-if(!require(multtest))install.packages("multtest")
-if(!require(Seurat))install.packages("Seurat")
-if(!require(dplyr))install.packages("dplyr")
-if(!require(mindr))install.packages("mindr")
-if(!require(mindr))install.packages("tidyverse")
-#####自动读取cellranger(LINUX)输出的feature barcode matric
 rm(list = ls())
-pbmc.data <- Read10X(data.dir = "filtered_gene_bc_matrices/hg19/") 
-#自动读取10X的数据，是一些tsv与mtx文件
-pbmc <- CreateSeuratObject(counts = pbmc.data, project = "biomamba")
+setwd("D:\\Datas\\scRNA_seq")
+#step1 install and load packages
+install.packages("tidyverse");install.packages("Matrix")
+install.packages("RCurl");install.packages("scales");install.packages("purrr")
+install.packages("cowplot");install.packages("BiocManager");
+install.packages("Seurat");install.packages("metap");install.packages("stringr");
+BiocManager::install("SingleCellExperiment");BiocManager::install("AnnotationHub")
+BiocManager::install("ensembldb");BiocManager::install("multtest")
+BiocManager::install("glmGamPoi")
 
-####仅有一个稀疏矩阵时的读取方法#####
-matrix_data <- read.table("single_cell_datamatrix.txt", sep="\t", header=T, row.names=1)
-dim(matrix_data)
-seurat_obj <- CreateSeuratObject(counts = matrix_data)
+library(SingleCellExperiment);library(Seurat);library(tidyverse)
+library(Matrix);library(scales);library(cowplot);library(RCurl)
+library(metap);library(stringr);library(dplyr);library(purrr)
 
-######读取RDS文件############
-rm(list = ls())
-pbmc <- readRDS("panc8.rds")
-saveRDS(pbmc,"pbmc.rds")
+#step2 import file
+## data source: GSE204796
+## read 10X data and generate Seurat object
+for (file in c("GSM6194008_D8","GSM6194009_D14")){
+  seurat_data <- Read10X(data.dir = paste0("D:\\Datas\\scRNA_seq\\", file))
+  seurat_obj <- CreateSeuratObject(counts = seurat_data,min.features = 100, 
+                                   project = file)
+  assign(file, seurat_obj)
+}
+### Create a merged Seurat object
+merged_seurat <- merge(x=GSM6194008_D8,GSM6194009_D14,add.cell.id = c("D8","D14")) 
+
+#step3 Quality Control
+## Cell-level filtering (1.Cell counts;2.UMI counts per cell;3.Genes detected per cell;4.Complexity (novelty score);5.Mitochondrial counts ratio)
+head(merged_seurat@meta.data)
 
 
-############# 网络图查看 #########
-# 这一部分由于版本原因我们做了较大的修改
-if(!require(tidyverse))install.packages("tidyverse")
+### Compute complexity (number of genes per UMI for each cell)
+merged_seurat$log10GenesPerUMI <- log10(merged_seurat$nFeature_RNA)/log10(merged_seurat$nCount_RNA)
+### Compute mitochondrial ratio(线粒体基因比值)
+merged_seurat$mitoRatio <- PercentageFeatureSet(object = merged_seurat, pattern = "^MT-")/100
+# Add cell IDs to metadata
+metadata <- merged_seurat@meta.data
+metadata$cells <- rownames(metadata)
+# Create sample column
+metadata$sample <- NA
+metadata$sample[which(str_detect(metadata$orig.ident, "_D8"))] <- "D8"
+metadata$sample[which(str_detect(metadata$orig.ident, "_D14"))] <- "D14"
+merged_seurat@meta.data <- metadata
+# Visualize the correlation between genes detected and number of UMIs and determine whether strong presence of cells with low numbers of genes/UMIs
 
-out2 <- str(pbmc)  %>%  
-  capture.output(.) %>% 
-  gsub(
-    pattern = "\\.\\. ",
-    replacement = "#",
-    x = .
-  ) %>% 
-  gsub(
-    pattern = "\\.\\.@",
-    replacement = "# ",
-    x = .
-  ) %>% 
-  gsub(pattern="^\\s+#",replace="#")
+#{r pressure,echo=FALSE}
+ggplot(merged_seurat@meta.data, aes(x=nCount_RNA, y=nFeature_RNA, color=mitoRatio)) +
+  geom_point() +
+  scale_colour_gradient(low = "gray90", high = "black") +
+  stat_smooth(method = lm) +
+  scale_x_log10() +
+  scale_y_log10() +
+  theme_classic() +
+  geom_vline(xintercept = 500) +
+  geom_hline(yintercept = 250) +
+  facet_wrap(~sample)
 
-if(!require(mindr))install.packages("mindr")
-mindr::mm(
-  from = out2,
-  input_type = "markdown",
-  output_type = "widget",
-  root = "Seurat"
-)
+filtered_seurat <- subset(x = merged_seurat,subset= (nCount_RNA >= 500) &
+                            (nFeature_RNA >= 250) & (log10GenesPerUMI > 0.80) &
+                            (mitoRatio < 0.20))
+
+## Gene-level filtering
+counts <- GetAssayData(object = filtered_seurat, assay = "RNA",slot = "counts")
+# Only keeping those genes expressed in more than 10 cells
+keep_genes <- Matrix::rowSums(counts > 0) >= 10
+filtered_counts <- counts[keep_genes, ]
+# Reassign to filtered Seurat object
+filtered_seurat <- CreateSeuratObject(filtered_counts, meta.data = filtered_seurat@meta.data)
+
+#step4 normalize
+## remove cell cycle effect 
+seurat_phase <- NormalizeData(filtered_seurat)
+# Load cell cycle markers (https://github.com/satijalab/seurat/blob/master/data/)
+load("cc.genes.updated.2019.rda")
+# Score cells for cell cycle
+seurat_phase <- CellCycleScoring(seurat_phase, 
+                                  g2m.features=cc.genes.updated.2019$g2m.genes, 
+                                 s.features = cc.genes.updated.2019$s.genes)
+# Identify the most variable genes
+seurat_phase <- FindVariableFeatures(seurat_phase, 
+                                     selection.method = "vst",
+                                     nfeatures = 2000, 
+                                     verbose = FALSE)
+# Scale the counts
+seurat_phase <- ScaleData(seurat_phase)
+# Perform PCA
+seurat_phase <- RunPCA(seurat_phase)
+# Plot the PCA colored by cell cycle phase
+DimPlot(seurat_phase,reduction = "pca",group.by= "Phase",split.by = "Phase")
+
+### normalization using SCTransform
+split_seurat <- SplitObject(seurat_phase, split.by = "sample")
+split_seurat <- split_seurat[c("D8","D14")]
+options(future.globals.maxSize = 4000 * 1024^2)
+for (i in 1:length(split_seurat)) {
+  split_seurat[[i]] <- SCTransform(split_seurat[[i]], vars.to.regress = c("mitoRatio"),conserve.memory = TRUE)
+}#去掉effect vars.to.regresss = c("影响因素")
+
+#5. Integration
+# Select the most variable features to use for integration
+integ_features <- SelectIntegrationFeatures(object.list = split_seurat, 
+                                            nfeatures = 3000) 
+# Prepare the SCT list object for integration
+split_seurat <- PrepSCTIntegration(object.list = split_seurat, 
+                                   anchor.features = integ_features)
+# Find best buddies - can take a while to run
+integ_anchors <- FindIntegrationAnchors(object.list = split_seurat, 
+                                        normalization.method = "SCT", 
+                                        anchor.features = integ_features)
+# Integrate across conditions
+seurat_integrated <- IntegrateData(anchorset = integ_anchors, 
+                                   normalization.method = "SCT")
+# Run PCA
+seurat_integrated <- RunPCA(object = seurat_integrated)
+PCAPlot(seurat_integrated,split.by = "sample")
+# Run UMAP
+seurat_integrated <- RunUMAP(seurat_integrated, dims = 1:40,reduction = "pca")
+# Plot UMAP                  
+DimPlot(seurat_integrated)       
+
+
+#5. Clustering
+## PCA (feature selection)
+##filtered_seurat <- RunPCA(filtered_seurat,verbose = FALSE)
+ElbowPlot(object = seurat_integrated, ndims = 40)
+# ref: https://hbctraining.github.io/scRNA-seq_online/lessons/elbow_plot_metric.html
+
+
+seurat_integrated <- FindNeighbors(object = seurat_integrated, dims = 1:20, verbose = FALSE)
+seurat_integrated <- FindClusters(object = seurat_integrated,resolution = c(0.4, 0.6, 0.8, 1.0, 1.4),verbose = FALSE)
+
+# Assign identity of clusters
+seurat_integrated <- RunUMAP(object = seurat_integrated,reduction = "pca",dims = 1:20,verbose = FALSE)
+
+DimPlot(object = seurat_integrated,reduction = "umap",label = TRUE)
+
+Idents(object = seurat_integrated) <- "integrated_snn_res.0.8"
+# Plot the UMAP
+DimPlot(seurat_integrated,reduction = "umap",label = TRUE,label.size = 6)
+# UMAP of cells in each cluster by sample
+DimPlot(seurat_integrated, label = TRUE, split.by = "sample")+NoLegend()
+# Explore whether clusters segregate by cell cycle phase
+DimPlot(seurat_integrated,label = TRUE,split.by = "Phase")+NoLegend()
+
+
+#6. Marker identification (cluster annotation)
+#ref:https://hbctraining.github.io/scRNA-seq_online/lessons/09_merged_SC_marker_identification.html
+# Select the RNA counts slot to be the default assay
+DefaultAssay(seurat_integrated) <- "RNA"
+# Normalize RNA data for visualization purposes
+seurat_integrated <- NormalizeData(seurat_integrated, verbose = FALSE)
+# Find markers for every cluster compared to all remaining cells, report only the positive ones
+markers <- FindAllMarkers(object = seurat_integrated, 
+                          only.pos = TRUE,min.diff.pct = 0.3,
+                          logfc.threshold = 0.25)            
+DefaultAssay(seurat_integrated) <- "RNA"
+
+cluster1_conserved_markers <- FindConservedMarkers(seurat_integrated,
+                                                   ident.1 = 1,
+                                                   grouping.var = "sample",only.pos = TRUE,
+                                                   logfc.threshold = 0.25)
+# Extract top 10 markers per cluster
+get_conserved <- function(cluster){
+  FindConservedMarkers(seurat_integrated,ident.1 = cluster,
+                       grouping.var = "sample",only.pos = TRUE) %>% cbind(cluster_id = cluster, .)
+}
+conserved_markers <- map_dfr(c(2,14,15), get_conserved)
+top10 <- conserved_markers %>% cbind %>% 
+  mutate(avg_fc = (D8_avg_log2FC + D14_avg_log2FC) /2) %>% 
+  group_by(cluster_id) %>% 
+  top_n(n = 10, wt = avg_fc)
+# Plot interesting marker gene expression for cluster 20
+FeaturePlot(seurat_integrated, 
+            reduction = "umap", 
+            features=c("AQP4","GFAP","MBP","PLP1","VCAN","BCAN","FLT1","CLDN5"), 
+            order = TRUE,
+            min.cutoff = 'q10', 
+            label = TRUE)
+# Vln plot - cluster 20
+VlnPlot(object = seurat_integrated, 
+        features = c("FGF17","FGF8","TPSAB1", "TPSB2", "FCER1A", "GATA1", "GATA2"))
+
+
+# define clusters
+seurat_integrated <- RenameIdents(object = seurat_integrated, 
+                                  "0" = "Naive or memory CD4+ T cells",
+                                  "1" = "CD14+ monocytes",
+                                  "2" = "Naive or memory CD4+ T cells",
+                                  "3" = "CD14+ monocytes",
+                                  "4" = "CD4+ T cells",
+                                  "5" = "CD8+ T cells",
+                                  "6" = "B cells",
+                                  "7" = "Stressed cells / Activated T cells",
+                                  "8" = "NK cells",
+                                  "9" = "FCGR3A+ monocytes",
+                                  "10" = "CD4+ T cells",
+                                  "11" = "B cells",
+                                  "12" = "NK cells",
+                                  "13" = "CD8+ T cells",
+                                  "14" = "CD14+ monocytes",
+                                  "15" = "Conventional dendritic cells",
+                                  "16" = "Megakaryocytes",
+                                  "17" = "B cells", 
+                                  "18" = "CD4+ T cells")
+# Plot the UMAP
+DimPlot(object = seurat_integrated, 
+        reduction = "umap", 
+        label = TRUE,
+        label.size = 3,
+        repel = TRUE)
+
+
+
+
+
+
