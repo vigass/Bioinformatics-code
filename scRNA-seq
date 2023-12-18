@@ -9,7 +9,13 @@ BiocManager::install("SingleCellExperiment");BiocManager::install("AnnotationHub
 BiocManager::install("ensembldb");BiocManager::install("multtest")
 BiocManager::install("glmGamPoi")
 
-library(SingleCellExperiment);library(Seurat);library(tidyverse)
+#dir.create("~/SeuratV4")
+# 然后安装的时候，指定安装目录
+#install.packages('Seurat', repos = c('https://satijalab.r-universe.dev'), lib = "~/SeuratV4")
+#.libPaths(c("~/SeuratV4", .libPaths()))
+packageVersion("Seurat")
+library(Seurat)
+library(SingleCellExperiment);library(tidyverse)
 library(Matrix);library(scales);library(cowplot);library(RCurl)
 library(metap);library(stringr);library(dplyr);library(purrr)
 
@@ -61,7 +67,7 @@ filtered_seurat <- subset(x = merged_seurat,subset= (nCount_RNA >= 500) &
                             (mitoRatio < 0.20))
 
 ## Gene-level filtering
-counts <- GetAssayData(object = filtered_seurat, assay = "RNA",slot = "counts")
+counts <- GetAssayData(object = filtered_seurat,slot = "counts")
 # Only keeping those genes expressed in more than 10 cells
 keep_genes <- Matrix::rowSums(counts > 0) >= 10
 filtered_counts <- counts[keep_genes, ]
@@ -75,7 +81,7 @@ seurat_phase <- NormalizeData(filtered_seurat)
 load("cc.genes.updated.2019.rda")
 # Score cells for cell cycle
 seurat_phase <- CellCycleScoring(seurat_phase, 
-                                  g2m.features=cc.genes.updated.2019$g2m.genes, 
+                                 g2m.features=cc.genes.updated.2019$g2m.genes, 
                                  s.features = cc.genes.updated.2019$s.genes)
 # Identify the most variable genes
 seurat_phase <- FindVariableFeatures(seurat_phase, 
@@ -153,7 +159,8 @@ seurat_integrated <- NormalizeData(seurat_integrated, verbose = FALSE)
 # Find markers for every cluster compared to all remaining cells, report only the positive ones
 markers <- FindAllMarkers(object = seurat_integrated, 
                           only.pos = TRUE,min.diff.pct = 0.3,
-                          logfc.threshold = 0.25)            
+                          logfc.threshold = 0.25)  
+head(markers)
 DefaultAssay(seurat_integrated) <- "RNA"
 
 cluster1_conserved_markers <- FindConservedMarkers(seurat_integrated,
@@ -209,9 +216,3 @@ DimPlot(object = seurat_integrated,
         label = TRUE,
         label.size = 3,
         repel = TRUE)
-
-
-
-
-
-
