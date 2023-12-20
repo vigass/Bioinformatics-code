@@ -1,5 +1,5 @@
 rm(list=ls())
-setwd('C:\\Users\\如意\\Desktop\\GIST_GEO')
+setwd('D:\\Datas\\AU')
 rm(list=ls())
 ################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
@@ -11,7 +11,7 @@ BiocManager::install("GEOquery")
 
 #加载GEOquery包
 library(GEOquery)
-gse="GSE47911"
+gse="GSE37265"
 
 #getGEO的第一个参数是GSE序列号，destdir指定了下载的路径('.'代表在当前目录下)
 #getGPL表示是否下载GPL数据
@@ -63,7 +63,7 @@ if(T){
   a = getGEO(gpl,destdir = ".")
   b = a@dataTable@table
   colnames(b)
-  ids2 = b[,c("ID","GENE_SYMBOL")]
+  ids2 = b[,c("ID","Gene Symbol")]
   colnames(ids2) = c("probe_id","symbol")
   ids2 = ids2[ids2$symbol!="" & !str_detect(ids2$symbol,"///"),]
 }
@@ -96,6 +96,8 @@ dat=as.data.frame(t(exp))
 #加载包
 library(FactoMineR)
 library(factoextra)
+group_list <- str_split(as.character(pd$`condition:ch1`),' ',simplify = T)[,1]
+
 
 #执行PCA
 dat.pca <- PCA(dat, graph = FALSE)
@@ -119,7 +121,8 @@ save(pca_plot, file = "pca_plot. Rdata")
 rm(list = ls())
 load("step2_output.Rdata")
 load("step3_output.Rdata")
-
+group_list <- ifelse(pd$`condition:ch1`=="Ulcer","Ulcer","Normal")
+group_list
 #加载limma包
 library(limma)
 
@@ -127,7 +130,7 @@ library(limma)
 design=model.matrix(~group_list)
 
 #将表达矩阵 exp 和设计矩阵 design 进行拟合将表达矩阵exp和设计矩阵 design 进行拟合
-fit=lmFit(exp, design)
+fit=lmFit(data.frame(exp), design)
 
 #对拟合对象'fit'进行贝叶斯估计
 fit=eBayes(fit)
@@ -178,7 +181,7 @@ head(deg) #查看基因注释后的前几个结果
 
 gene_list <- deg[deg$change %in% c("up", "down"), "symbol"]
 gene_list <- data.frame(gene = gene_list)
-write.table(gene_list, file = "C:\\Users\\如意\\Desktop\\GIST_GEO\\2\\gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
+write.table(gene_list, file = "gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 
 save(logFC_t,deg,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
@@ -305,11 +308,11 @@ kegg_enrichment <- enrichKEGG(gene         = entrez_ids,
                               qvalueCutoff = 0.2)
 
 # GO富集结果可视化(气泡图)
-go_dotplot <- dotplot(result_bp) + ggtitle("GO Enrichment Analysis - BP") +
+go_dotplot_bp <- dotplot(result_bp) + ggtitle("GO Enrichment Analysis - BP") +
   theme(legend.position = "none")
-go_dotplot <- dotplot(result_cc) + ggtitle("GO Enrichment Analysis - CC") +
+go_dotplot_cc <- dotplot(result_cc) + ggtitle("GO Enrichment Analysis - CC") +
   theme(legend.position = "none")
-go_dotplot <- dotplot(result_mf) + ggtitle("GO Enrichment Analysis - MF") +
+go_dotplot_mf <- dotplot(result_mf) + ggtitle("GO Enrichment Analysis - MF") +
   theme(legend.position = "none")
 
 # KEGG富集结果可视化(气泡图)
