@@ -31,3 +31,5 @@ geneCoef
 
 lassoGene <- lassoGene[-1]
 actCoef<- actCoef[-1]
+write.table(geneCoef,file = "geneCoef.txt",sep = "\t",
+          row.names = F,col.names = F,quote = )
