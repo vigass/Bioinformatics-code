@@ -182,8 +182,10 @@ head(deg) #查看基因注释后的前几个结果
 gene_list <- deg[deg$change %in% c("up", "down"), "symbol"]
 gene_list <- data.frame(gene = gene_list)
 write.table(gene_list, file = "gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
-
-save(logFC_t,deg,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
+# 计算 'deg$change' 中每个值的出现次数
+counts <- table(deg$change)
+print(counts)
+save(logFC_t,deg,counts,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
 ################Step7 可视化######################
 #清除环境变量并加载包
