@@ -1,0 +1,26 @@
+rm(list=ls())
+setwd("D:\\Datas\\Pan_cancer")
+library(easyTCGA)
+tcga_expr_file <- "download_from_xena\\tcga_RSEM_gene_tpm.gz"
+tcga_clin_file <- "download_from_xena\\Survival_SupplementalTable_S1_20171025_xena_sp"
+tcga_clin_file <- file.choose()
+getpancancer_xena(tcga_expr_file = tcga_expr_file,
+                  tcga_clin_file = tcga_clin_file,
+                  type = "tcga")
+
+gtex_expr_file <- "download_from_xena/gtex_RSEM_gene_tpm.gz"
+gtex_pheno_file <- "download_from_xena/GTEX_phenotype.gz"
+getpancancer_xena(gtex_expr_file = gtex_expr_file,
+                  gtex_pheno_file = gtex_pheno_file,
+                  type = "gtex")
+
+tcga_expr_file <- "download_from_xena/tcga_RSEM_gene_tpm.gz"
+tcga_clin_file <- "download_from_xena/Survival_SupplementalTable_S1_20171025_xena_sp"
+gtex_expr_file <- "download_from_xena/gtex_RSEM_gene_tpm.gz"
+gtex_pheno_file <- "download_from_xena/GTEX_phenotype.gz"
+getpancancer_xena(tcga_expr_file = tcga_expr_file,
+                  tcga_clin_file = tcga_clin_file,
+                  gtex_expr_file = gtex_expr_file,
+                  gtex_pheno_file = gtex_pheno_file,
+                  type = "tcga+gtex")
+#参考：https://zhuanlan.zhihu.com/p/655377455
