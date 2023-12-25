@@ -1,5 +1,5 @@
 rm(list=ls())
-setwd('D:\\Datas\\AU')
+setwd('C:\\Users\\EDY\\Desktop\\test2')
 rm(list=ls())
 ################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
@@ -114,23 +114,38 @@ print(pca_plot)
 #保存图片和数据
 ggsave(plot = pca_plot, filename = paste0(gse,"PCA.png"))
 save(pca_plot, file = "pca_plot. Rdata")
-
-
 ###############Step6   差异基因表达分析##################
 #清除环境变量并加载Step2和3中保存的数据
 rm(list = ls())
 load("step2_output.Rdata")
 load("step3_output.Rdata")
-group_list <- ifelse(pd$`condition:ch1`=="Ulcer","Ulcer","Normal")
+library(stringr)
+library(dplyr)
+filtered_pd <- pd %>%
+  filter(source_name_ch1 == "PBMC" 
+  )
+x <- filtered_pd$geo_accession
+exp2 <- t(exp1)
+exp2 <- exp1[match(x,rownames(exp2))]
+
+group_list <- c(rep('pauciaticular course JRA',5),rep('polyaticular course JRA',15),
+                rep('JSpA',6),rep('control',11))
+group_list
+#exp1 <- exp2[,c(1:5,6:20,21:26,27:37)]
+exp1 <- exp2[,c(6:20,27:37)]
+group_list <- group_list[c(6:20,27:37)]
 group_list
 #加载limma包
+#if (!require("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#BiocManager::install("limma")
 library(limma)
 
 #根据 group_list 创建一个设计矩阵，用于差异比较的设计
-design=model.matrix(~group_list)
+design=model.matrix(~+group_list)
 
 #将表达矩阵 exp 和设计矩阵 design 进行拟合将表达矩阵exp和设计矩阵 design 进行拟合
-fit=lmFit(data.frame(exp), design)
+fit=lmFit(data.frame(exp1), design)
 
 #对拟合对象'fit'进行贝叶斯估计
 fit=eBayes(fit)
@@ -149,10 +164,10 @@ head(deg)
 
 #合并表
 table(deg$probe_id %in% ids2$probe_id) #比较 deg 数据框中的 probe_id 列和 ids 数据框中的 probe_id 列的匹配情况，并生成一个计数表，显示匹配和不匹配的数量。
-#deg <- inner_join(deg,ids,by="probe_id") #和上行代码等价
+deg <- inner_join(deg,ids2,by="probe_id") #和上行代码等价
 deg <- merge(x = deg,
-             y = ids2,
-             by="probe_id") #将 deg 数据框和 ids2 数据框按照 probe_id 列进行合并
+             #y = ids2,
+             #by="probe_id") #将 deg 数据框和 ids2 数据框按照 probe_id 列进行合并
 deg <-deg[!duplicated(deg$symbol),] #找到 deg 数据框中的重复行，并使用逻辑索引 !duplicated(deg$symbol) 来删除重复行
 dim(deg) #显示deg 数据框的维度
 
@@ -169,7 +184,13 @@ table(deg$change) #根据 deg 数据框的change列中的值创建频数表
 
 #添加 ENTREZID 列，后续将在富集分析中使用
 library(ggplot2) #载入 ggplot2 软件包，用于数据可视化
+#if (!require("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#BiocManager::install("clusterProfiler")
 library(clusterProfiler) #载入 clusterProfiler 软件包，用于生物学注释和富集分析
+#if (!require("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#BiocManager::install("org.Hs.eg.db")
 library(org.Hs.eg.db) #载入 org.Hs.eg.db 软件包，该软件包包含了人类基因组的注释信息
 s2e <- bitr(unique(deg$symbol), fromType = "SYMBOL",
             toType = c("ENTREZID"),
@@ -224,7 +245,7 @@ volcano_plot <- p +
                             data = for_label,
                             color="black")
 volcano_plot
-ggsave(plot = volcano_plot, filename = paste0(gse,"volcano.png"))
+ggsave(plot = p, filename = paste0(gse,"volcano.png"))
 
 #绘制热图
 cg=names(tail(sort(apply(exp,1,sd)),1000))
