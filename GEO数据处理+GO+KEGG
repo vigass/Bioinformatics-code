@@ -1,151 +1,136 @@
-rm（列表=ls（））
-setwd（'C：\\用户\\EDY\\桌面\\test2'）
-rm（列表=ls（））
-######Step1 下载GEO数据##################
+rm(list=ls())
+setwd('F:\\Datas\\TEST\\1')
+rm(list=ls())
+################Step1 下载GEO数据##################
 #检查是否安装了Bioconductor
-if （！require（“BiocManager”， quiet = TRUE））
-install.packages（“BiocManager”）
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
 
 #通过Bioconductor下载GEOquery包
-BiocManager：：install（“GEOquery”）
+BiocManager::install("GEOquery")
 
 #加载GEOquery包
-库（GEOquery）
-gse=“GSE37265”
+library(GEOquery)
+gse="GSE205050"
 
-#getGEO的第一个参数是GSE序列号，destdir指定了下载的路径（'.'代表在当前目录下)
+#getGEO的第一个参数是GSE序列号，destdir指定了下载的路径('.'代表在当前目录下)
 #getGPL表示是否下载GPL数据
-eSet <- getGEO（gse，
-destdir = '.'，
-getGPL = F）
+eSet <- getGEO(gse,
+               destdir = '.',
+               getGPL = F)
 
 
-########Step2 提取表达矩阵、临床信息和芯片编号##########
+###############Step2 提取表达矩阵、临床信息和芯片编号##########
 #提取表达矩阵exp
-exp <- exprs（eSet[[1]]）
-exp[1：4,1：4]
-#exp = log2（exp+1） #根据实际情况判断是否须有加上log2
+exp <- exprs(eSet[[1]])
+exp[1:4,1:4]
+#exp = log2(exp+1) #根据实际情况判断是否须有加上log2
 
 #提取临床信息
-pd <- pData（eSet[[1]]）
+pd <- pData(eSet[[1]])
 
 #提取芯片平台号
 gpl <- eSet[[1]]@annotation
-p = 相同（行名（pd），列名（exp））
+p = identical(rownames(pd),colnames(exp))
 
 #保存上面提取的数据到文件中
-save（gse，exp，pd，gpl，file = “step2_output.Rdata“）
+save(gse,exp,pd,gpl,file = "step2_output.Rdata")
 
 
-######Step3 分组，芯片注释#############
+#######################Step3 分组，芯片注释#############
 #清空当前环境下的所有变量
-rm（列表 = ls（））
+rm(list = ls())
 
 #加载Step2中保存的数据
-load（“step2_output。Rdata“）
+load("step2_output.Rdata")
 
 #加载stringr包
-库（串口）
-库（DPLYR）
+library(stringr)
+library(dplyr)
 #查看表达矩阵的列名
-表（colnames（exp））
+table(colnames(exp))
 
 #建立分组
-group_list <- ifelse（str_detect（pd$title， “GIST”）， “GIST”，“Normal”）
-group_list <- factor（group_list， levels = c（“GIST”，“Normal”））
+group_list <- ifelse(str_detect(pd$title, "GIST"), "GIST","Normal")
+group_list <- factor(group_list, levels = c("GIST","Normal"))
 ####分组根据pd的description决定###
 
 #查看分组信息
 group_list
-桌子（group_list）
+table(group_list)
 #获取注释信息
-如果（T）{
-a = getGEO（gpl，destdir = “.”）
-b = a@dataTable@table
-列名（b）
-ids2 = b[，c（“ID”，“基因符号”）]
-colnames（ids2） = c（“probe_id”，“符号”）
-ids2 = ids2[ids2$symbol！=“” & ！str_detect（ids2$symbol，“///”），]
+if(T){
+  a = getGEO(gpl,destdir = ".")
+  b = a@dataTable@table
+  colnames(b)
+  ids2 = b[,c("ID","Gene Symbol")]
+  colnames(ids2) = c("probe_id","symbol")
+  ids2 = ids2[ids2$symbol!="" & !str_detect(ids2$symbol,"///"),]
 }
 #########Step4 保存表达矩阵##########
-exp1 <- data.frame（exp）
-exp1 <- mutate（exp1， probe_id = 行名（exp））
-exp1 <- 合并（x = exp1， y = ids2， by = “probe_id”）
-exp1 <- exp1[！duplicated（exp1$symbol），]
-row.names（exp1） <- exp1$symbol
-exp1 <- exp1[，-1]
-exp1 <- exp1[，-ncol（exp1）]
-write.csv（exp1， file = “exp1.csv”， row.names = FALSE）
+exp1 <- data.frame(exp)
+exp1 <- mutate(exp1, probe_id = rownames(exp))
+exp1 <- merge(x = exp1, y = ids2, by = "probe_id")
+exp1 <- exp1[!duplicated(exp1$symbol),]
+row.names(exp1) <- exp1$symbol
+exp1 <- exp1[,-1]
+exp1 <- exp1[,-ncol(exp1)]
+write.csv(exp1, file = "exp1.csv", row.names = FALSE)
 
 #保存上述提取的数据
-save（group_list，ids2，exp，exp1，pd，file = “step3_output.Rdata“）
+save(group_list,ids2,exp,exp1,pd,file = "step3_output.Rdata")
 
 
-######Step5 主成分分析##############
+######################Step5 主成分分析##############
 
 #清空当前环境下的变量
-rm（列表 = ls（））
+rm(list = ls())
 
 #加载数据
-load（“step2_output。Rdata“）
-load（“step3_output。Rdata“）
+load("step2_output.Rdata")
+load("step3_output.Rdata")
 
 #对表达矩阵进行转置操作(使原先的行变为列，列变为行)并转换成数据框格式
-dat=as.data.frame（t（exp））
+dat=as.data.frame(t(exp))
 
 #加载包
-库（FactoMineR）
-图书馆（factoextra）
-group_list <- str_split（as.character（pd$'条件：ch1'），' '，simplify = T）[，1]
+library(FactoMineR)
+library(factoextra)
+group_list <- str_split(as.character(pd$`condition:ch1`),' ',simplify = T)[,1]
 
 
 #执行PCA
-dat.pca <- PCA（dat， 图形 = FALSE）
-pca_plot <- fviz_pca_ind（dat.pca，
-geom.ind = “点”，
-col.ind = group_list，
-调色板 = c（“#00AFBB”， “#E7B800”，“#a23412”，“#c2351f”），#####色彩颜色根据分组个数决定
-addEllipses = TRUE，
-legend.title = “组”）
+dat.pca <- PCA(dat, graph = FALSE)
+pca_plot <- fviz_pca_ind(dat.pca,
+                         geom.ind = "point",
+                         col.ind = group_list,
+                         palette = c("#00AFBB", "#E7B800","#a23412","#c2351f"),#####色彩颜色根据分组个数决定
+                         addEllipses = TRUE,
+                         legend.title = "Groups")
 
 #查看PCA图
-打印（pca_plot）
+print(pca_plot)
 
 #保存图片和数据
-ggsave（plot = pca_plot， filename = paste0（gse，“PCA.png”））
-save（pca_plot， file = “pca_plot.Rdata“）
-######Step6 差异基因表达分析##################
-#清除环境变量并加载Step2和3中保存的数据
-rm（列表 = ls（））
-load（“step2_output。Rdata“）
-load（“step3_output。Rdata“）
-库（串口）
-库（DPLYR）
-filtered_pd <- 钯 %>%
-filter（source_name_ch1 == “PBMC”
-  )
-x <- filtered_pd$geo_accession
-exp2 <- t（exp1）
-exp2 <- exp1[匹配（x，行名（exp2））]
+ggsave(plot = pca_plot, filename = paste0(gse,"PCA.png"))
+save(pca_plot, file = "pca_plot. Rdata")
 
-group_list <- c（rep（'多腳病程JRA'，5），rep（'多腳病程JRA'，15），
-rep（'JSpA'，6），rep（'控制'，11））
-group_list
-#exp1 <- exp2[，c（1：5,6：20,21：26,27：37）]
-exp1 <- exp2[，c（6：20,27：37）]
-group_list <-group_list[C（6：20,27：37）]
+
+###############Step6   差异基因表达分析##################
+#清除环境变量并加载Step2和3中保存的数据
+rm(list = ls())
+load("step2_output.Rdata")
+load("step3_output.Rdata")
+group_list <- ifelse(pd$`condition:ch1`=="Ulcer","Ulcer","Normal")
 group_list
 #加载limma包
-#if （！require（“BiocManager”， quiet = TRUE））
-#install.packages("BiocManager")
-#BiocManager::install("limma")
 library(limma)
 
 #根据 group_list 创建一个设计矩阵，用于差异比较的设计
-design=model.matrix(~+group_list)
+design=model.matrix(~group_list)
 
 #将表达矩阵 exp 和设计矩阵 design 进行拟合将表达矩阵exp和设计矩阵 design 进行拟合
-fit=lmFit(data.frame(exp1), design)
+fit=lmFit(data.frame(exp), design)
 
 #对拟合对象'fit'进行贝叶斯估计
 fit=eBayes(fit)
@@ -164,182 +149,176 @@ head(deg)
 
 #合并表
 table(deg$probe_id %in% ids2$probe_id) #比较 deg 数据框中的 probe_id 列和 ids 数据框中的 probe_id 列的匹配情况，并生成一个计数表，显示匹配和不匹配的数量。
-deg <- inner_join(deg,ids2,by="probe_id") #和上行代码等价
+#deg <- inner_join(deg,ids,by="probe_id") #和上行代码等价
 deg <- merge(x = deg,
-             #y = ids2,
-             #by="probe_id") #将 deg 数据框和 ids2 数据框按照 probe_id 列进行合并
+             y = ids2,
+             by="probe_id") #将 deg 数据框和 ids2 数据框按照 probe_id 列进行合并
 deg <-deg[!duplicated(deg$symbol),] #找到 deg 数据框中的重复行，并使用逻辑索引 !duplicated(deg$symbol) 来删除重复行
 dim(deg) #显示deg 数据框的维度
 
 #为后续火山图绘制增加一列(上调或下调)
 logFC_t=1.5
-#logFC_t=mean（deg$logFC）+2*sd（deg$logFC） #和上行代码作用一样，都是设置logFC 的阈值
-change=ifelse（deg$P.Value>0.05，'稳定'，
-ifelse（deg$logFC >logFC_t，'up'，
-ifelse（deg$logFC < -logFC_t，'down'，'stable'） ））
-#根据条件判断，如果 P.Value 大于 0.05，则赋值为 'stable';如果 logFC 大于 logFC_t，则赋值为 'up';如果 logFC 小于 -logFC_t，则赋值为 'down';否则赋值为 'stable'
-deg <- mutate（deg， change） #将change列添加到deg数据框中。
-扬程（deg） #显示deg的前几行
-table（deg$change） #根据 deg 数据框的change列中的值创建频数表
+#logFC_t=mean(deg$logFC)+2*sd(deg$logFC) #和上行代码作用一样，都是设置logFC 的阈值
+change=ifelse(deg$P.Value>0.05,'stable',
+              ifelse(deg$logFC >logFC_t,'up',
+                     ifelse(deg$logFC < -logFC_t,'down','stable') ))
+#根据条件判断，如果 P.Value 大于 0.05，则赋值为 'stable'；如果 logFC 大于 logFC_t，则赋值为 'up'；如果 logFC 小于 -logFC_t，则赋值为 'down'；否则赋值为 'stable'
+deg <- mutate(deg, change) #将change列添加到deg数据框中。
+head(deg) #显示deg的前几行
+table(deg$change) #根据 deg 数据框的change列中的值创建频数表
 
 #添加 ENTREZID 列，后续将在富集分析中使用
-library（ggplot2） #载入 ggplot2 软件包，用于数据可视化
-#if （！require（“BiocManager”， quiet = TRUE））
-#install.packages（“BiocManager”）
-#BiocManager：：install（“clusterProfiler”）
-library（clusterProfiler） #载入 clusterProfiler 软件包，用于生物学注释和富集分析
-#if （！require（“BiocManager”， quiet = TRUE））
-#install.packages（“BiocManager”）
-#BiocManager：：install（“org.Hs.eg.db“）
-库（org.Hs.eg.db） #载入 org.Hs.eg.db 软件包，该软件包包含了人类基因组的注释信息
-s2e <- bitr（unique（deg$symbol）， fromType = “符号”，
-toType = c（“ENTREZID”），
-OrgDb = 组织。Hs.eg.db） #将 deg 数据框中的 symbol 列的基因符号（SYMBOL）转换为对应的Entrez ID
-head（s2e） #打印 s2e 对象的前几行，以查看基因符号到Entrez ID的转换结果
-head（deg） #打印 deg 数据框的前几行，以查看处理前的结果
-deg <- inner_join（deg，s2e，by=c（“symbol”=“SYMBOL”）） #将 deg 数据框和 s2e 对象根据 symbol 列和 SYMBOL 列进行内连接（内部匹配），即将具有相同基因符号的行合并
-扬程（deg） #查看基因注释后的前几个结果
+library(ggplot2) #载入 ggplot2 软件包，用于数据可视化
+library(clusterProfiler) #载入 clusterProfiler 软件包，用于生物学注释和富集分析
+library(org.Hs.eg.db) #载入 org.Hs.eg.db 软件包，该软件包包含了人类基因组的注释信息
+s2e <- bitr(unique(deg$symbol), fromType = "SYMBOL",
+            toType = c("ENTREZID"),
+            OrgDb = org.Hs.eg.db) #将 deg 数据框中的 symbol 列的基因符号（SYMBOL）转换为对应的Entrez ID
+head(s2e) #打印 s2e 对象的前几行，以查看基因符号到Entrez ID的转换结果
+head(deg) #打印 deg 数据框的前几行，以查看处理前的结果
+deg <- inner_join(deg,s2e,by=c("symbol"="SYMBOL")) #将 deg 数据框和 s2e 对象根据 symbol 列和 SYMBOL 列进行内连接（内部匹配），即将具有相同基因符号的行合并
+head(deg) #查看基因注释后的前几个结果
 
-gene_list <- deg[deg$change %in% c（“up”， “down”）， “symbol”]
-gene_list <- data.frame（gene = gene_list）
-write.table（gene_list， file = “gene_list.txt”， sep = “\t”， quote = FALSE， row.names = FALSE）
+gene_list <- deg[deg$change %in% c("up", "down"), "symbol"]
+gene_list <- data.frame(gene = gene_list)
+write.table(gene_list, file = "gene_list.txt", sep = "\t", quote = FALSE, row.names = FALSE)
 # 计算 'deg$change' 中每个值的出现次数
-计数 <- 表（deg$change）
-打印（计数）
-save（logFC_t，deg，counts，file = “step5_output.Rdata“） #保存数据，以便后续的分析使用
+counts <- table(deg$change)
+print(counts)
+save(logFC_t,deg,counts,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
 
-######Step7 可视化######################
+################Step7 可视化######################
 #清除环境变量并加载包
-rm（列表 = ls（））
-load（“step2_output。Rdata“）
-load（“step3_output。Rdata“）
-load（“step5_output。Rdata“）
-库（DPLYR）
+rm(list = ls())
+load("step2_output.Rdata")
+load("step3_output.Rdata")
+load("step5_output.Rdata")
+library(dplyr)
 
 #绘制火山图
-dat <-mutate（deg，v=-log10（P.Value））
-if（T）{for_label <-dat%>%
-filter（符号 %in% c（“RUNX2”，“FN1”））}
-if（F）{for_label <-dat %>% head（10）}
-if（F）{x1 = dat %>%
-filter（change == “up”） %>%
-头部（3）
-x2 = 数据百分比 %>%
-filter（change == “down”） %>%
-头部（3）
-for_label = rbind（x1，x2）}
-p <- ggplot（数据 = dat，
-aes（x = logFC，
-y = v）） +
-geom_point（alpha=0.4， size=3.5，
-AES（颜色=变化）） +
-ylab（“-log10（Pvalue）”）+
-scale_color_manual（values=c（“蓝色”， “灰色”，“红色”））+
-geom_vline（xintercept=c（-logFC_t，logFC_t），lty=4，col=“黑色”，lwd=0.8） +
-geom_hline（yintercept = -log10（0.05）， lty=4， col=“black”， lwd=0.8） +
-theme_bw（）
+dat <-mutate(deg,v=-log10(P.Value))
+if(T){for_label <-dat%>%
+  filter(symbol %in% c("RUNX2","FN1"))}
+if(F){for_label <-dat %>% head(10)}
+if(F){x1 = dat %>%
+  filter(change == "up") %>%
+  head(3)
+x2 = dat %>%
+  filter(change == "down") %>%
+  head(3)
+for_label = rbind(x1,x2)}
+p <- ggplot(data = dat,
+            aes(x = logFC,
+                y = v)) +
+  geom_point(alpha=0.4, size=3.5,
+             aes(color=change)) +
+  ylab("-log10(Pvalue)")+
+  scale_color_manual(values=c("blue", "grey","red"))+
+  geom_vline(xintercept=c(-logFC_t,logFC_t),lty=4,col="black",lwd=0.8) +
+  geom_hline(yintercept = -log10(0.05), lty=4, col="black", lwd=0.8) +
+  theme_bw()
 p
 volcano_plot <- p +
-geom_point（大小 = 3，形状 = 1，数据 = for_label） +
-ggrepel：：geom_label_repel（aes（标签 = 符号），
-数据 = for_label，
-color=“黑色”）
+  geom_point(size = 3, shape = 1, data = for_label) +
+  ggrepel::geom_label_repel(aes(label = symbol),
+                            data = for_label,
+                            color="black")
 volcano_plot
-ggsave（plot = p， filename = paste0（gse，“volcano.png”））
+ggsave(plot = volcano_plot, filename = paste0(gse,"volcano.png"))
 
 #绘制热图
-cg=names（tail（sort（apply（exp，1，sd）），1000））
-n=exp[cg，]
-annotation_col=数据帧（组=group_list）
-行名（annotation_col） = 列名（n）
-库（pheatmap）
-heatmap_plot <- pheatmap（n，
-show_colnames=F，
-show_rownames = F，
-annotation_col = annotation_col，
-scale = “行”）
+cg=names(tail(sort(apply(exp,1,sd)),1000))
+n=exp[cg,]
+annotation_col=data.frame(group=group_list)
+rownames(annotation_col) = colnames(n)
+library(pheatmap)
+heatmap_plot <- pheatmap(n,
+                         show_colnames=F,
+                         show_rownames = F,
+                         annotation_col = annotation_col,
+                         scale = "row")
 #保存结果
-库（ggplot2）
-png（文件 = paste0（gse，“热图 .png”））
-ggsave（plot = heatmap_plot， filename = paste0（gse，“heatmap.png”））
-dev.off（）
+library(ggplot2)
+png(file = paste0(gse,"heatmap.png"))
+ggsave(plot = heatmap_plot, filename = paste0(gse,"heatmap.png"))
+dev.off()
 
 
 
 
 # 确保clusterProfiler和org.Hs.eg.db已经被安装
-if （！requireNamespace（“BiocManager”， quiet = TRUE））
-install.packages（“BiocManager”）
-BiocManager：：install（“clusterProfiler”）
-BiocManager：：install（“org.Hs.eg.db“）
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("clusterProfiler")
+BiocManager::install("org.Hs.eg.db")
 
 # 载入必要的包
-库（clusterProfiler）
-库（org.Hs.eg.db）
+library(clusterProfiler)
+library(org.Hs.eg.db)
 
 # 准备Entrez ID列表，这里以示例为例
 entrez_ids <- deg$ENTREZID  # 假定你的DEGs列表中有一个ENTREZID列
 
 # 过滤掉NA值
-entrez_ids <- entrez_ids[！is.na（entrez_ids）]
+entrez_ids <- entrez_ids[!is.na(entrez_ids)]
 
 # 加载所需的库
-库（clusterProfiler）
-库（org.Hs.eg.db）
-库（ggplot2）
-库（enrichplot）
+library(clusterProfiler)
+library(org.Hs.eg.db)
+library(ggplot2)
+library(enrichplot)
 
 # 假设你的DEGs Entrez IDs存储在变量entrez_ids中
 
 # GO富集分析，分别进行BP、CC和MF
-result_bp <- enrichGO（gene = entrez_ids， OrgDb = org.Hs.eg.db， ont = “BP”， pAdjustMethod = “BH”， pvalueCutoff = 0.05）
-result_cc <- enrichGO（gene = entrez_ids， OrgDb = org.Hs.eg.db， ont = “CC”， pAdjustMethod = “BH”， pvalueCutoff = 0.05）
-result_mf <- enrichGO（gene = entrez_ids， OrgDb = org.Hs.eg.db， ont = “MF”， pAdjustMethod = “BH”， pvalueCutoff = 0.05）
+result_bp <- enrichGO(gene = entrez_ids, OrgDb = org.Hs.eg.db, ont = "BP", pAdjustMethod = "BH", pvalueCutoff = 0.05)
+result_cc <- enrichGO(gene = entrez_ids, OrgDb = org.Hs.eg.db, ont = "CC", pAdjustMethod = "BH", pvalueCutoff = 0.05)
+result_mf <- enrichGO(gene = entrez_ids, OrgDb = org.Hs.eg.db, ont = "MF", pAdjustMethod = "BH", pvalueCutoff = 0.05)
 
 # 提取每个类别的前10个富集通路
-top10_bp <头（result_bp@result， 10）
-top10_cc <头（result_cc@result， 10）
-top10_mf <头（result_mf@result， 10）
+top10_bp <- head(result_bp@result, 10)
+top10_cc <- head(result_cc@result, 10)
+top10_mf <- head(result_mf@result, 10)
 
 # 添加类别标签
-top10_bp$类别 <- 'BP'
-top10_cc$类别 <- 'CC'
-top10_mf$类别 <- 'MF'
+top10_bp$category <- 'BP'
+top10_cc$category <- 'CC'
+top10_mf$category <- 'MF'
 
 # 合并数据
-top10_all <- rbind（top10_bp， top10_cc， top10_mf）
+top10_all <- rbind(top10_bp, top10_cc, top10_mf)
 
 # 根据p值排序并为作图分配一个顺序变量
-top10_all <- top10_all[order（top10_all$category， -top10_all$pvalue）， ]
-top10_all$Description <- factor（top10_all$Description， levels = top10_all$Description）
+top10_all <- top10_all[order(top10_all$category, -top10_all$pvalue), ]
+top10_all$Description <- factor(top10_all$Description, levels = top10_all$Description)
 
 # 绘制柱状图
-ggplot（top10_all， aes（x = 描述， y = -log10（pvalue）， fill = 类别）） +
-geom_bar（stat = “identity”） +
-theme_minimal（） +
-labs（x = “GO 术语”， y = “-log10（p 值）”， fill = “类别”） +
-coord_flip（） + # 翻转坐标轴，使得条形图水平显示
-theme（axis.text.x = element_text（angle = 45， hjust = 1）， # 调整x轴标签的角度
-legend.position = “底部”） +
-ggtitle（“BP、CC 和 MF 的前 10 个 GO 术语”）
+ggplot(top10_all, aes(x = Description, y = -log10(pvalue), fill = category)) + 
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "GO Term", y = "-log10(p-value)", fill = "Category") +
+  coord_flip() + # 翻转坐标轴，使得条形图水平显示
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), # 调整x轴标签的角度
+        legend.position = "bottom") +
+  ggtitle("Top 10 GO terms across BP, CC, and MF")
 
 # KEGG富集分析
-kegg_enrichment <-enrichKEGG（基因=entrez_ids，
-organism = 'has'， # hsa代表Homo sapiens
-pAdjustMethod= “BH”，
-pvalueCutoff = 0.05，
-qvalueCutoff = 0.2）
+kegg_enrichment <- enrichKEGG(gene         = entrez_ids,
+                              organism     = 'hsa', # hsa代表Homo sapiens
+                              pAdjustMethod= "BH",
+                              pvalueCutoff = 0.05,
+                              qvalueCutoff = 0.2)
 
-# GO富集结果可视化（气泡图）
-go_dotplot_bp <- dotplot（result_bp） + ggtitle（“GO 富集分析 - BP”） +
-theme（legend.position = “none”）
-go_dotplot_cc <- dotplot（result_cc） + ggtitle（“GO 富集分析 - CC”） +
-theme（legend.position = “none”）
-go_dotplot_mf <- dotplot（result_mf） + ggtitle（“GO 富集分析 - MF”） +
-theme（legend.position = “none”）
+# GO富集结果可视化(气泡图)
+go_dotplot_bp <- dotplot(result_bp) + ggtitle("GO Enrichment Analysis - BP") +
+  theme(legend.position = "none")
+go_dotplot_cc <- dotplot(result_cc) + ggtitle("GO Enrichment Analysis - CC") +
+  theme(legend.position = "none")
+go_dotplot_mf <- dotplot(result_mf) + ggtitle("GO Enrichment Analysis - MF") +
+  theme(legend.position = "none")
 
-# KEGG富集结果可视化（气泡图）
-kegg_dotplot <- dotplot（kegg_enrichment） + ggtitle（“KEGG通路富集分析”）
+# KEGG富集结果可视化(气泡图)
+kegg_dotplot <- dotplot(kegg_enrichment) + ggtitle("KEGG Pathway Enrichment Analysis")
 kegg_dotplot
 # 保存富集分析结果
-save（result_bp， result_cc， result_mf， kegg_enrichment， file = “enrichment_results.RData“）
+save(result_bp, result_cc, result_mf, kegg_enrichment, file = "enrichment_results.RData")
