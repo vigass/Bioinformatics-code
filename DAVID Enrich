@@ -18,9 +18,7 @@ ggplot(KEGG,aes(x=Count,y=Term))+
   geom_point(aes(color=PValue,size=Count))+
   scale_color_gradient(low='slateblue4',high='firebrick3')+
   theme_bw()+
-  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())+
-  ggtitle("KEGG Enrichment Results") # 添加标题
-  
+  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())
 ###读取和整理GO富集的结果)
 GO_CC<-read.delim('CC.txt')
 GO_CC_signif=GO_CC[which(GO_CC$PValue<0.05),]
@@ -64,7 +62,7 @@ ggplot(data=go,aes(x=GO_term_order,y=Count,fill=Category))+
   theme_bw()+
   xlab("Terms")+
   ylab("Gene_counts")+
-  labs()+ggtitle("Top 10 GO Enrichment Results across CC, BP, and MF")+
+  labs()+
   theme(axis.text.x = element_text(face = "bold",color = "black",angle = 45,vjust = 0.65,hjust = 0.7,size = 12))
 
 # GO富集结果可视化(气泡图)
@@ -72,18 +70,14 @@ ggplot(top10_cc,aes(x=Count,y=Term))+
   geom_point(aes(color=PValue,size=Count))+
   scale_color_gradient(low='slateblue4',high='firebrick3')+
   theme_bw()+
-  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())+
-  ggtitle("CC Enrichment Results") # 添加标题
+  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())
 ggplot(top10_bp,aes(x=Count,y=Term))+
   geom_point(aes(color=PValue,size=Count))+
   scale_color_gradient(low='slateblue4',high='firebrick3')+
   theme_bw()+
-  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())+
-  ggtitle("BP Enrichment Results")
+  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())
 ggplot(top10_mf,aes(x=Count,y=Term))+
   geom_point(aes(color=PValue,size=Count))+
   scale_color_gradient(low='slateblue4',high='firebrick3')+
   theme_bw()+
-  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())+
-  ggtitle("MF Enrichment Results")
-
+  theme(panel.grid.minor = element_blank(),panel.grid.major = element_blank())
