@@ -110,7 +110,7 @@ ggboxplot(data = data ,
                      symnum.args=list(cutpoints = c(0,0.001,0.01,0.05,1),symbols = c("***","**","*","ns")))
 
 #Step3 spearmanplot
-sig_gene <- c( "HSP90AA1","INS","CD4","PTEN","HDAC1")
+sig_gene <- c( "HSP90AA1","INS","CD4","PTEN","HDAC1")#筛选出来的hub gene
 install.packages('ggcorrplot')
 library(psych)
 x <- exp1
