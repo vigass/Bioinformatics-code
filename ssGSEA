@@ -1,6 +1,7 @@
 rm(list=ls())
-setwd('C:\\Users\\如意\\Desktop\\WGCNA-JIA')
+setwd('D:\\Datas\\AU')
 load("step_Lasso.Rdata")#GEO
+group <- read.csv("group.csv")
 #####ssGSEA
 #Step1 heatmap
 if (!require("BiocManager", quietly = TRUE))
@@ -15,7 +16,7 @@ library(dplyr)
 library(tibble)
 library(tidyverse)
 library(ggpubr)
-exp1 <- t(exp1)
+
 geneSet <- read.csv("geneSet.csv",header = T) 
 class(geneSet)
 geneSet <- data.frame(geneSet)
@@ -46,6 +47,9 @@ apply(ssgsea.1[,1:6], 2, range)
 
 library(pheatmap)
 library(stringr)
+#sorted_group <- group[order(group$group,group$samples),]
+#group_list <- sorted_group$group
+#分类
 annotation_col = data.frame(group_list)
 rownames(annotation_col)=colnames(exp1)
 colnames(annotation_col)[1]<-"group"
@@ -82,7 +86,7 @@ ggboxplot(data = data ,
           merge = FALSE,#是香将相同值的分组合并。
           color ="black",#箱形图边框的颜色。
           fill ="group",#形图填充色
-          palette = c("#1C3EDF","#DF1C26"),
+          palette = c("#1C3EDF","#DF1C26","#00AF11","#B12451"),
           title = NULL,#图形标题。
           xlab ="ssGSEA",#x 标签
           ylab ="Expression",#y 抽标签
@@ -110,10 +114,10 @@ ggboxplot(data = data ,
                      symnum.args=list(cutpoints = c(0,0.001,0.01,0.05,1),symbols = c("***","**","*","ns")))
 
 #Step3 spearmanplot
-sig_gene <- c( "HSP90AA1","INS","CD4","PTEN","HDAC1")#筛选出来的hub gene
-install.packages('ggcorrplot')
+sig_gene <- c( "TLR2","STAT1","CCL5","CXCL8")#筛选后得到的hubgene
+#install.packages('ggcorrplot')
 library(psych)
-x <- exp1
+x <- t(exp1)
 x <- x[,sig_gene]
 y <- t(ssgsea.1)
 library(psych)
@@ -144,5 +148,4 @@ mycol<-colorRampPalette(c("blue","white","tomato"))(100)
 pheatmap(r,scale = "none",cluster_row = T, cluster_col = T, border=NA,
          display_numbers = p,fontsize_number = 12, number_color = "white",
          cellwidth = 20, cellheight =20,color=mycol)
-
 
