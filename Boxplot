@@ -6,26 +6,29 @@ library(ggplot2)
 library(ggpubr)
 colors=c('#4169E1','#FF0000','#A136A1')
 
-dataHDAC1 = data.frame(t(exp1["HDAC1",group$sample]))
+dataCXCL8 = data.frame(exp1["CXCL8",group$sample])
+colnames(dataCXCL8)[1] <- "CXCL8"
 
 group_name =unique(group$group)
 my_comparison =as.list(as.data.frame(combn(group_name,2)))
-dataHDAC1$Group = factor(group$group)
-pHDAC1= ggplot(dataHDAC1,aes(x =Group,y=HDAC1,color=Group))+
+dataCXCL8$Group = factor(group$group)
+pCXCL8= ggplot(dataCXCL8,aes(x =Group,y=CXCL8,color=Group))+
   scale_color_manual(values=colors[1:2])+
   geom_boxplot(width=0.4)+
   geom_point(position = position_jitter(0.1),size=2)+
   stat_summary(fun=median,geom='crossbar',size=1,width=0.2)+
   stat_compare_means(comparisons=my_comparison,size=13,method='wilcox.test',exact=FALSE,aes(label=..p.signif..))+
-  coord_cartesian(ylim = c(0,2))+        #注意c(,)的范围
+  coord_cartesian(ylim = c(0,20))+        #注意c(,)的范围
   theme_bw()+
+  ggtitle("CXCL8 Gene Expression Comparison")+ 
   xlab("")+
-  ylab("HDAC1Gene(log2CPM)")+
+  ylab("CXCL8Gene(log2CPM)")+
   theme(panel.grid.major=element_blank(),panel.grid.minor=element_blank())+
   theme(axis.text=element_text(size=26,colour="black",face="bold"),
         axis.title=element_text(size=28,colour="black",face= "bold"),
         legend.text=element_text(size=24,face="bold"),
         legend.title=element_blank(),
         legend.key=element_blank(),
-        axis.text.x= element_text(angle=0,hjust = 0.5))
-ggsave(" HDAC1_gene_boxplot.pdf",plot=pHDAC1,height=8,width=10) 
+        axis.text.x= element_text(angle=0,hjust = 0.5),
+        plot.title = element_text(hjust = 0.5))
+ggsave("CXCL8_gene_boxplot.pdf",plot=pCXCL8,height=8,width=10)
