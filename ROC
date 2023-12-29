@@ -1,8 +1,9 @@
 rm(list=ls())
-install.packages('pROC')
+#install.packages('pROC')
 library(pROC)
+#一般来说，Control=Normal，用0代表;Case=干预,用1代表
 load("step_ROC.Rdata")
-hubgenes_expression=t(hubgenes_expression)
+head(hubgenes_expression)
 par (mfrow=c(3,3))
 for(i in 1:length(hubgenes)){
   x_color=c("blue", "red", "green", "black", "brown" , "orange","pink" , "cyan", "grey")
