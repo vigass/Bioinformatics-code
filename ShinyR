@@ -1,0 +1,68 @@
+setwd("C:\\Users\\EDY\\Desktop\\TEST\\Enrich")
+rm(list = ls())
+library(shiny)
+library(ggplot2)
+library(dplyr)
+library(stringi)
+library(enrichplot)
+
+# Shiny UI
+ui <- fluidPage(
+  titlePanel("Enrichment Analysis Visualization"),
+  fluidRow(
+    column(3, 
+           selectInput("analysisType", "Choose Analysis Type:",
+                       choices = c("KEGG", "GO_CC", "GO_BP", "GO_MF"))
+    ),
+    column(9,
+           plotOutput("enrichPlot", width = "100%", height = "500px")  # 调整高度
+    )
+  )
+)
+
+# Shiny Server
+server <- function(input, output) {
+  
+  output$enrichPlot <- renderPlot({
+    # 根据选择的分析类型读取相应的数据
+    if(input$analysisType == "KEGG") {
+      enrich_data <- read.delim("KEGG.txt")
+    } else if(input$analysisType == "GO_CC") {
+      enrich_data <- read.delim('CC.txt')
+    } else if(input$analysisType == "GO_BP") {
+      enrich_data <- read.delim('BP.txt')
+    } else if(input$analysisType == "GO_MF") {
+      enrich_data <- read.delim('MF.txt')
+    }
+    
+    # 进行富集分析的数据处理
+    enrich_signif <- enrich_data %>% filter(PValue < 0.05)
+    enrich_signif <- enrich_signif %>% select(1:3, 5)
+    enrich_signif <- data.frame(enrich_signif)
+    
+    if(input$analysisType == "KEGG") {
+      enrich_signif$Term <- stringi::stri_sub(enrich_signif$Term, 10, 100)
+      # KEGG可视化
+      p <- ggplot(enrich_signif, aes(x = Count, y = Term)) +
+        geom_point(aes(color = PValue, size = Count)) +
+        scale_color_gradient(low = 'slateblue4', high = 'firebrick3') +
+        theme_bw() +
+        theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank()) +
+        ggtitle("KEGG Enrichment Results")
+    } else {
+      # GO可视化（示例）
+      enrich_signif$Term <- stringi::stri_sub(enrich_signif$Term, 12, 100)
+      p <- ggplot(enrich_signif, aes(x = Count, y = Term)) +
+        geom_point(aes(color = PValue, size = Count)) +
+        scale_color_gradient(low = 'slateblue4', high = 'firebrick3') +
+        theme_bw() +
+        theme(panel.grid.minor = element_blank(), panel.grid.major = element_blank()) +
+        ggtitle(paste(input$analysisType, "Enrichment Results"))
+    }
+    
+    return(p)
+  })
+}
+
+# 运行Shiny应用
+shinyApp(ui = ui, server = server)
