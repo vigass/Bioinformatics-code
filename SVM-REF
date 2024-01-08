@@ -1,0 +1,27 @@
+rm(list=ls())
+set.seed(4396)
+load("step_Lasso.Rdata")#GEO
+library(e1071)
+library(randomForest)
+library(randomForestSRC)
+library(tibble)
+#if (!require("BiocManager", quietly = TRUE))
+#install.packages("BiocManager")
+#BiocManager::install("sigFeature")
+library(sigFeature)
+library(tidyverse)
+#if(!require("remotes")) {
+#  install.packages("remotes")}
+#remotes::install_github("EduardoArle/bRacatus")
+library(bRacatus)
+source('msvmRFE.R')
+hubgenes <- c("CCL2", "TLR2",  "CXCL10", "STAT1", "CCL5", "IFNG", "CXCL8", "ITGB2")
+hubgenes_probeID<-ids2$probe_id[match(hubgenes ,ids2$symbol)]
+hubgenes_expression<-exp1[match(hubgenes,rownames (exp1)),]
+exp <- t(hubgenes_expression)
+input <- data.frame(cbind(group = group$group, exp))
+label_mapping <- c("Normal" = 0, "Ulcer" = 1)
+input$group <- as.numeric(sapply(input$group, function(x) label_mapping[x]))
+original_rownames <- rownames(input)
+original_colnames <- colnames(input)
+input <- data.frame(lapply(input, function(x) as.numeric(as.character(x))), stringsAsFactors = FALSE)
