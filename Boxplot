@@ -11,7 +11,7 @@ colnames(dataCXCL8)[1] <- "CXCL8"
 
 group_name =unique(group$group)
 my_comparison =as.list(as.data.frame(combn(group_name,2)))
-dataCXCL8$Group = factor(group$group)
+dataCXCL8$Group = factor(group$group,levels = c("SQ","Normal"))#保持分组顺序不变
 pCXCL8= ggplot(dataCXCL8,aes(x =Group,y=CXCL8,color=Group))+
   scale_color_manual(values=colors[1:2])+
   geom_boxplot(width=0.4)+
