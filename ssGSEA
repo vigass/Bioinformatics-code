@@ -1,5 +1,5 @@
 rm(list=ls())
-setwd('D:\\Datas\\AU')
+setwd('C:\\Users\\EDY\\Desktop\\NSCLC\\GSE21933\\test\\2')
 load("step_Lasso.Rdata")#GEO
 group <- read.csv("group.csv")
 #####ssGSEA
@@ -16,6 +16,11 @@ library(dplyr)
 library(tibble)
 library(tidyverse)
 library(ggpubr)
+Filtered_group <- group %>%
+  filter(group %in% c("AD","Normal"))
+group <- Filtered_group
+sample_names <- intersect(colnames(exp1), group$samples)
+exp1 <- data.frame(exp1[, sample_names])
 
 geneSet <- read.csv("geneSet.csv",header = T) 
 class(geneSet)
@@ -50,12 +55,15 @@ library(stringr)
 #sorted_group <- group[order(group$group,group$samples),]
 #group_list <- sorted_group$group
 #分类
-annotation_col = data.frame(group_list)
+annotation_col = data.frame(group$group)
 rownames(annotation_col)=colnames(exp1)
 colnames(annotation_col)[1]<-"group"
+normal_indices <- which(group$group == "Normal")
+other_indices <- which(group$group != "Normal")
+ssgsea_sorted <- ssgsea[, c(normal_indices, other_indices)]
 
 p=pheatmap(
-  ssgsea,
+  ssgsea_sorted,
   border_color = NA,
   cluster_rows = T,cluster_cols = F,
   color = colorRampPalette(colors = c("blue","white","tomato"))(100),
@@ -71,13 +79,14 @@ p=pheatmap(
 #Step2 boxplot
 y=t(ssgsea.1)
 ####write.csv(design, file = "group.csv", row.names = T)
-group <- read.csv("group.csv")
+#group <- read.csv("group.csv")
 data <- cbind(y,group)
 data <-data[,c(29,30,1:28)]
 data=pivot_longer(data=data,
                   cols = 3:30,
                   names_to = "celltype",
                   values_to = "proportion")
+#data$group <- factor(data$group, levels= c("Normal", "AD"))
 
 ggboxplot(data = data ,
           x ="celltype",#籍形图中的分组变量
@@ -114,7 +123,7 @@ ggboxplot(data = data ,
                      symnum.args=list(cutpoints = c(0,0.001,0.01,0.05,1),symbols = c("***","**","*","ns")))
 
 #Step3 spearmanplot
-sig_gene <- c( "TLR2","STAT1","CCL5","CXCL8")#筛选后得到的hubgene
+sig_gene <- c( "B3GNT3","GCNT3","FUT1","FUT8")#筛选后得到的hubgene
 #install.packages('ggcorrplot')
 library(psych)
 x <- t(exp1)
@@ -148,4 +157,3 @@ mycol<-colorRampPalette(c("blue","white","tomato"))(100)
 pheatmap(r,scale = "none",cluster_row = T, cluster_col = T, border=NA,
          display_numbers = p,fontsize_number = 12, number_color = "white",
          cellwidth = 20, cellheight =20,color=mycol)
-
