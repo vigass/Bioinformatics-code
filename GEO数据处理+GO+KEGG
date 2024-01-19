@@ -198,7 +198,7 @@ library(dplyr)
 #绘制火山图
 dat <-mutate(deg,v=-log10(P.Value))
 if(T){for_label <-dat%>%
-  filter(symbol %in% c("RUNX2","FN1"))}
+  filter(symbol %in% c("RUNX2","FN1"))}#可展示基因
 if(F){for_label <-dat %>% head(10)}
 if(F){x1 = dat %>%
   filter(change == "up") %>%
@@ -227,16 +227,17 @@ volcano_plot
 ggsave(plot = volcano_plot, filename = paste0(gse,"volcano.png"))
 
 #绘制热图
-cg=names(tail(sort(apply(exp,1,sd)),1000))
+cg=names(tail(sort(apply(exp,1,sd)),50))#SD,top50
 n=exp[cg,]
 annotation_col=data.frame(group=group_list)
 rownames(annotation_col) = colnames(n)
 library(pheatmap)
 heatmap_plot <- pheatmap(n,
                          show_colnames=F,
-                         show_rownames = F,
+                         show_rownames = T,
                          annotation_col = annotation_col,
-                         scale = "row")
+                         scale = "row",
+                         cluster_cols = FALSE)
 #保存结果
 library(ggplot2)
 png(file = paste0(gse,"heatmap.png"))
