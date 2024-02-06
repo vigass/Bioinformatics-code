@@ -1,0 +1,66 @@
+rm(list=ls())
+load("step3_output.Rdata")
+library(tidyverse)
+filtered_pd <- pd %>%
+  filter(source_name_ch1 %in% c("Adrenocortical carcinoma biopsy","Normal adrenal biopsy"))
+exp2 <- exp1[,colnames(exp1) %in% filtered_pd$geo_accession]
+group_list <- filtered_pd$source_name_ch1
+group_list <- ifelse(group_list=="Adrenocortical carcinoma biopsy","1","0")
+#一般来说，Control=Normal，用0代表;Case=干预,用1代表
+
+set.seed(1532)
+hubgenes=c("CDK1","AURKA","CCNB2","BIRC5","CCNB1","TYMS","TOP2A")
+hubgenes_expression<-exp2[rownames(exp2) %in% hubgenes,]
+hubgenes_expression <- as.matrix(hubgenes_expression)
+#方法1
+par (mfrow=c(1,1))
+for(i in 1:length(hubgenes)){
+  x_color=c("blue", "red", "green", "black", "brown" , "orange","pink" , "cyan", "grey")
+  plot.roc(group_list,hubgenes_expression[i,],main=hubgenes[i],
+           col=x_color[i],print.auc=T,percent=T,cex.lab=1.5,print.auc.cex=1.5)
+}
+
+#方法2
+#一般来说，Control=Normal，用0代表;Case=干预,用1代表
+roc1<- roc(controls=hubgenes_expression[1,][group_list=="0"],
+           cases=hubgenes_expression[1,][group_list=="1"])
+roc2<- roc(controls=hubgenes_expression[2,][group_list=="0"],
+           cases=hubgenes_expression[2,][group_list=="1"])
+roc3<- roc(controls=hubgenes_expression[3,][group_list=="0"],
+           cases=hubgenes_expression[3,][group_list=="1"])
+roc4<- roc(controls=hubgenes_expression[4,][group_list=="0"],
+           cases=hubgenes_expression[4,][group_list=="1"])
+roc5<- roc(controls=hubgenes_expression[5,][group_list=="0"],
+           cases=hubgenes_expression[5,][group_list=="1"])
+roc6<- roc(controls=hubgenes_expression[6,][group_list=="0"],
+           cases=hubgenes_expression[6,][group_list=="1"])
+roc7<- roc(controls=hubgenes_expression[7,][group_list=="0"],
+           cases=hubgenes_expression[7,][group_list=="1"])
+
+plot(roc1,col="red",legacy.axes=T)
+plot(roc2, add=TRUE, col="blue")
+plot(roc3, add=TRUE, col="green")
+plot(roc4, add=TRUE, col="black")
+plot(roc5, add=TRUE, col="brown")
+plot(roc6, add=TRUE, col="orange")
+plot(roc7, add=TRUE, col="pink")
+
+round(auc(roc1),3)##AUC
+round(ci(roc1),3)##95%CI
+round(auc(roc2),3)##AUC
+round(ci(roc2),3)##95%CI
+round(auc(roc3),3)##AUC
+round(ci(roc3),3)##95%CI
+round(auc(roc4),3)##AUC
+round(ci(roc4),3)##95%CI
+round(auc(roc5),3)##AUC
+round(ci(roc5),3)##95%CI
+round(auc(roc6),3)##AUC
+round(ci(roc6),3)##95%CI
+round(auc(roc7),3)##AUC
+round(ci(roc7),3)##95%CI
+
+legend("bottomright", legend=c("CDK1-auc0.968","AURRKA-auc0.905","CCNB2-auc0.986","BIRC5-auc0.965","CCNB1-auc0.961",
+                               "TYMS-auc0.993","TOP2Aauc-0.961"),
+       col=c( "red","blue", "black", "green", "brown" , "orange","pink" , "cyan", "grey"),lty=1)
+
