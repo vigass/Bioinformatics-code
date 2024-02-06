@@ -57,7 +57,7 @@ round(ci(roc9),3)##95%CI
 
 
 legend("bottomright", legend=c("VEGFA-auc0.62","MMP9-auc0.6","TBX21-auc0.609","CCR5-auc0.587","LCN2-auc0.63"),
-       col=c("blue", "red", "green", "black", "brown" , "orange","pink" , "cyan", "grey"),lty=1)
+       col=c("red", "blue", "green", "black", "brown" , "orange","pink" , "cyan", "grey"),lty=1)
 plot(roc1,
      add = FALSE,
      col = 'red', 
