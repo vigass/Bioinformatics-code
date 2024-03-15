@@ -1,0 +1,609 @@
+rm(list=ls())
+setwd('C:\\Users\\EDY\\Desktop\\y\\1')
+rm(list=ls())
+################Step1 下载GEO数据##################
+#检查是否安装了Bioconductor
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+#通过Bioconductor下载GEOquery包
+BiocManager::install("GEOquery")
+
+#加载GEOquery包
+library(GEOquery)
+gse="GSE90713"
+
+#getGEO的第一个参数是GSE序列号，destdir指定了下载的路径('.'代表在当前目录下)
+#getGPL表示是否下载GPL数据
+eSet <- getGEO(gse,
+               destdir = '.',
+               getGPL = F)
+
+
+###############Step2 提取表达矩阵、临床信息和芯片编号##########
+#提取表达矩阵exp
+exp <- exprs(eSet[[1]])
+exp[1:4,1:4]
+#exp = log2(exp+1) #根据实际情况判断是否须有加上log2
+
+#提取临床信息
+pd <- pData(eSet[[1]])
+
+#提取芯片平台号
+gpl <- eSet[[1]]@annotation
+p = identical(rownames(pd),colnames(exp))
+
+#保存上面提取的数据到文件中
+save(gse,exp,pd,gpl,file = "step2_output.Rdata")
+
+
+#######################Step3 分组，芯片注释#############
+#清空当前环境下的所有变量
+rm(list = ls())
+
+#加载Step2中保存的数据
+load("step2_output.Rdata")
+
+#加载stringr包
+library(stringr)
+library(dplyr)
+#查看表达矩阵的列名
+table(colnames(exp))
+
+#建立分组
+group_list <- ifelse(str_detect(pd$`tissue:ch1`, "normal adrenal"), "Normal","ACC")
+####分组根据pd的description决定###
+
+#查看分组信息
+group_list
+table(group_list)
+#获取注释信息
+if(T){
+  a = getGEO(gpl,destdir = ".")
+  b = a@dataTable@table
+  colnames(b)
+  ids2 = b[,c("ID","Gene Symbol")]
+  colnames(ids2) = c("probe_id","symbol")
+  ids2 = ids2[ids2$symbol!="" & !str_detect(ids2$symbol,"///"),]
+}
+#########Step4 保存表达矩阵##########
+exp1 <- data.frame(exp)
+exp1 <- mutate(exp1, probe_id = rownames(exp))
+exp1 <- merge(x = exp1, y = ids2, by = "probe_id")
+exp1 <- exp1[!duplicated(exp1$symbol),]
+row.names(exp1) <- exp1$symbol
+exp1 <- exp1[,-1]
+exp1 <- exp1[,-ncol(exp1)]
+write.csv(exp1, file = "exp1.csv", row.names = FALSE)
+
+#保存上述提取的数据
+save(group_list,ids2,exp,exp1,pd,file = "step3_output.Rdata")
+
+
+######################Step5 主成分分析##############
+
+#清空当前环境下的变量
+rm(list = ls())
+
+#加载数据
+load("step2_output.Rdata")
+load("step3_output.Rdata")
+library(tidyverse)
+filtered_pd <- pd %>%
+  filter(type == "RNA")
+group_list <- ifelse(str_detect(filtered_pd$`tissue:ch1`, "normal adrenal"), "Normal","ACC")
+table(group_list)
+exp2 <- exp[,colnames(exp) %in% filtered_pd$geo_accession]
+
+#对表达矩阵进行转置操作(使原先的行变为列，列变为行)并转换成数据框格式
+dat=as.data.frame(t(exp2))
+
+#加载包
+library(FactoMineR)
+library(factoextra)
+
+#执行PCA
+dat.pca <- PCA(dat, graph = FALSE)
+pca_plot <- fviz_pca_ind(dat.pca,
+                         geom.ind = "point",
+                         col.ind = group_list,
+                         palette = c("#00AFBB", "#E7B800","#a23412","#c2351f"),#####色彩颜色根据分组个数决定
+                         addEllipses = TRUE,
+                         legend.title = "Groups")
+
+#查看PCA图
+print(pca_plot)
+
+#保存图片和数据
+ggsave(plot = pca_plot, filename = paste0(gse,"PCA.png"))
+save(pca_plot, file = "pca_plot. Rdata")
+
+
+###############Step6   差异基因表达分析##################
+#清除环境变量并加载Step2和3中保存的数据
+rm(list = ls())
+load("step2_output.Rdata")
+load("step3_output.Rdata")
+library(tidyverse)
+filtered_pd <- pd %>%
+  filter(type == "RNA")
+group_list <- ifelse(str_detect(filtered_pd$`tissue:ch1`, "normal adrenal"), "Normal","ACC")
+filtered_pd$group <- group_list
+exp2 <- data.frame(exp1[,colnames(exp1) %in% filtered_pd$geo_accession])
+
+#加载limma包
+library(limma)
+
+#根据 group_list 创建一个设计矩阵，用于差异比较的设计
+design=model.matrix(~group_list)
+
+#将表达矩阵 exp 和设计矩阵 design 进行拟合将表达矩阵exp和设计矩阵 design 进行拟合
+fit=lmFit(exp2, design)
+
+#对拟合对象'fit'进行贝叶斯估计
+fit=eBayes(fit)
+
+#从拟合对象 fit 中获取差异基因的结果
+deg=topTable(fit, coef=2, number = Inf)
+
+#查看差异基因结果的前几行
+head(deg)
+
+#向deg数据框添加几列
+library(dplyr)
+deg <- mutate(deg,probe_id=rownames(deg)) #将 deg 数据框中的行名作为新的列 probe_id 添加到 deg
+#tibble::rownames_to_column(deg) #和上行代码等价
+head(deg)
+
+#为后续火山图绘制增加一列(上调或下调)
+logFC_t=1.5
+#logFC_t=mean(deg$logFC)+2*sd(deg$logFC) #和上行代码作用一样，都是设置logFC 的阈值
+change=ifelse(deg$P.Value>0.05,'stable',
+              ifelse(deg$logFC >logFC_t,'up',
+                     ifelse(deg$logFC < -logFC_t,'down','stable') ))
+#根据条件判断，如果 P.Value 大于 0.05，则赋值为 'stable'；如果 logFC 大于 logFC_t，则赋值为 'up'；如果 logFC 小于 -logFC_t，则赋值为 'down'；否则赋值为 'stable'
+deg <- mutate(deg, change) #将change列添加到deg数据框中。
+head(deg) #显示deg的前几行
+table(deg$change) #根据 deg 数据框的change列中的值创建频数表
+
+write.csv(deg,file = "deg.csv",row.names = T)
+save(logFC_t,deg,exp2,group_list,file = "step5_output.Rdata") #保存数据，以便后续的分析使用
+
+################Step7 可视化######################
+#清除环境变量并加载包
+rm(list = ls())
+load("step2_output.Rdata")
+load("step3_output.Rdata")
+load("step5_output.Rdata")
+library(dplyr)
+
+#绘制火山图
+dat <-mutate(deg,v=-log10(P.Value))
+
+if(F){for_label <-dat %>% head(10)}
+if(F){
+  x1 = dat %>%
+    filter(change == "up") %>%
+    head(3)
+  
+  x2 = dat %>%
+    filter(change == "down") %>%
+    head(3)
+  
+  for_label = rbind(x1,x2)}
+p <- ggplot(data = dat,
+            aes(x = logFC,
+                y = v)) +
+  geom_point(alpha=0.4, size=3.5,
+             aes(color=change)) +
+  ylab("-log10(Pvalue)")+
+  scale_color_manual(values=c("blue", "grey","red"))+
+  geom_vline(xintercept=c(-logFC_t,logFC_t),lty=4,col="black",lwd=0.8) +
+  geom_hline(yintercept = -log10(0.05), lty=4, col="black", lwd=0.8) +
+  theme_bw()
+p
+ggsave(plot = p, filename = paste0(gse,"volcano.png"))
+
+#绘制热图
+filtered_deg <- deg %>%
+  filter(deg$change %in% c("up","down"))
+exp3 <- exp2[rownames(exp2) %in% filtered_deg$probe_id, ]
+pd$`tissue:ch1` <- factor(pd$`tissue:ch1`, levels = c("adrenocortical carcinoma", "normal adrenal"))
+pd <- pd[order(pd$`tissue:ch1`), ]
+group_list <- ifelse(str_detect(pd$`tissue:ch1`, "normal adrenal"), "Normal","ACC")
+order_indices <- match(pd$geo_accession, colnames(exp3))
+exp4 <- exp3[, order_indices]
+
+cg=names(tail(sort(apply(exp4,1,sd)),50))
+n=exp4[cg,]
+annotation_col=data.frame(group=group_list)
+rownames(annotation_col) = colnames(n)
+library(pheatmap)
+heatmap_plot <- pheatmap(n,
+                         show_colnames=F,
+                         show_rownames = T,
+                         annotation_col = annotation_col,
+                         scale = "row",cluster_cols = F)
+#保存结果
+library(ggplot2)
+png(file = paste0(gse,"heatmap.png"))
+ggsave(plot = heatmap_plot, filename = paste0(gse,"heatmap.png"))
+dev.off()
+
+################Step8 免疫浸润######################
+rm(list = ls())
+###CIBERSORT###
+#library('devtools')
+#devtools::install_github("Moonerss/CIBERSORT")
+load("step5_output.Rdata")
+library(CIBERSORT)
+library(reader)
+library(ggplot2)
+library(reshape2)
+library(ggpubr)
+library(dplyr)
+data("LM22")
+TME.results <- cibersort(LM22,exp2,perm = 0,QN = F)
+group_list
+TME_data <- as.data.frame(TME.results[,1:22])
+TME_data$group <- group_list
+TME_data$sample <- row.names(TME_data)
+
+TME_New = melt(TME_data)
+colnames(TME_New)=c("Group","Sample","Celltype","Composition")  #设置行名
+head(TME_New)
+
+plot_order = TME_New[TME_New$Group=="ACC",] %>% 
+  group_by(Celltype) %>% 
+  summarise(m = median(Composition)) %>% 
+  arrange(desc(m)) %>% 
+  pull(Celltype)
+
+
+TME_New$Celltype = factor(TME_New$Celltype,levels = plot_order)
+if(T){
+  mytheme <- theme(plot.title = element_text(size = 12,color="black",hjust = 0.5),
+                   axis.title = element_text(size = 12,color ="black"), 
+                   axis.text = element_text(size= 12,color = "black"),
+                   panel.grid.minor.y = element_blank(),
+                   panel.grid.minor.x = element_blank(),
+                   axis.text.x = element_text(angle = 45, hjust = 1 ),
+                   panel.grid=element_blank(),
+                   legend.position = "top",
+                   legend.text = element_text(size= 12),
+                   legend.title= element_text(size= 12)
+  ) }
+
+box_TME <- ggplot(TME_New, aes(x = Celltype, y = Composition))+ 
+  labs(y="Cell composition",x= NULL,title = "TME Cell composition")+  
+  geom_boxplot(aes(fill = Group),position=position_dodge(0.5),width=0.5,outlier.alpha = 0)+ 
+  scale_fill_manual(values = c("#1CB4B8", "#EB7369"))+
+  theme_classic() + mytheme + 
+  stat_compare_means(aes(group =  Group),
+                     label = "p.signif",
+                     method = "wilcox.test",
+                     hide.ns = T)
+box_TME;ggsave("ACC_TME.pdf",box_TME,height=15,width=25,unit="cm")
+
+TME_four = as.data.frame(TME.results[,1:20])
+head(TME_four,3)
+
+#相关性分析
+library(ggcorrplot)
+library(corrplot)
+library(seriation)#install.packages("seriation")
+corrmatrix <- cor(TME_four, method = "spearman")
+testRes = cor.mtest(TME_four, conf.level = 0.95)
+pdf("CIBERSORT_cor.pdf", width = 8, height = 8)
+corrplot(corrmatrix, p.mat = testRes$p,  order = 'hclust',
+         insig = 'label_sig', sig.level = c(0.001, 0.01, 0.05),
+         pch.cex = 0.9, pch.col = 'grey20',type = 'lower')
+dev.off()
+
+
+
+###ssGSEA###
+rm(list = ls())
+load("step3_output.Rdata")
+library(GSEABase)
+library(GSVA)
+library(dplyr)
+library(tibble)
+library(tidyverse)
+library(ggpubr)
+group <- pd[,c("geo_accession", "tissue:ch1")]
+condition_function <- function(x) {
+  if (x == "adrenocortical carcinoma") {
+    return("ACC")
+  } else if (x == "normal adrenal") {
+    return("Normal")
+  } else {
+    return(x)  # 如果不是特定的条件，可以选择不替换
+  }
+}
+group$group <- sapply(group$tissue, condition_function)
+
+
+geneSet <- read.csv("geneSet.csv",header = T) 
+class(geneSet)
+geneSet <- geneSet %>%
+  column_to_rownames("X1")%>%t()
+a <- geneSet
+set <- colnames(a)
+l <- list()
+#i <- "Activated CD8 T cell"
+for (i in set) {
+  x <-  as.character(a[,i])
+  x <- x[nchar(x)!=0]
+  x <-  as.character(x)
+  l[[i]] <-x
+}
+
+exp1=as.matrix(exp1)
+
+##BiocManager::install("GSVA")
+library(GSVA)
+ssgsea <- gsva(exp1, l, method="ssgsea", kcdf="Gaussian", abs.ranking=TRUE)
+ssgsea.1 <- ssgsea
+for (i in colnames(ssgsea)) {
+  #i <- colnames(ssgsea)[1]
+  ssgsea.1[,i] <- (ssgsea[,i] -min(ssgsea[,i]))/(max(ssgsea[,i] )-min(ssgsea[,i] ))
+}
+apply(ssgsea.1[,1:6], 2, range)
+
+library(pheatmap)
+library(stringr)
+annotation_col = data.frame(group$group)
+rownames(annotation_col)=colnames(exp1)
+colnames(annotation_col)[1]<-"group"
+normal_indices <- which(group$group == "Normal")
+other_indices <- which(group$group != "Normal")
+ssgsea_sorted <- ssgsea[, c(normal_indices, other_indices)]
+
+
+p=pheatmap(
+  ssgsea_sorted,
+  border_color = NA,
+  cluster_rows = T,cluster_cols = F,
+  color = colorRampPalette(colors = c("blue","white","tomato"))(100),
+  labels_row = NULL,
+  annotation_col = annotation_col,
+  clustering_method = "ward.D2",
+  fontsize_col = 3,
+  cutree_cols = 2,
+  show_rownames = T,
+  show_colnames = F,
+)
+
+#Step2 boxplot
+y=t(ssgsea.1)
+data <- cbind(y,group)
+data <-data[,c(29,30,1:28)]
+data=pivot_longer(data=data,
+                  cols = 3:30,
+                  names_to = "celltype",
+                  values_to = "proportion")
+data <- merge(data,group,by = "geo_accession",all.x = T)
+
+ggboxplot(data = data ,
+          x ="celltype",#籍形图中的分组变量
+          y ="proportion",#会制箱形图的响应变量。
+          combine = TRUE,#是否将数据合并为一个箱形图
+          merge = FALSE,#是香将相同值的分组合并。
+          color ="black",#箱形图边框的颜色。
+          fill ="group",#形图填充色
+          palette = c("#1C3EDF","#DF1C26","#00AF11","#B12451"),
+          title = NULL,#图形标题。
+          xlab ="ssGSEA",#x 标签
+          ylab ="Expression",#y 抽标签
+          bxp.errorbar = FALSE,#是否在箱形图中会制误差务
+          bxp.errorbar.width = 0.2,#误差务密度。
+          facet.by = NULL,#基于哪些变量进行分面
+          panel.labs = NULL,#分面的
+          short.panel.labs = TRUE,
+          linetype ="solid",#线务
+          size = NULL,#产图形大小奔箱形图的宽度
+          widthnotch= FALSE,#产是否在箱形
+          outlier.shape = 20,#异常
+          select = NULL,#要绘制的变量
+          remove = NULL,#产不要绘制的变最。
+          order = NULL,#籍形图的排序方式。",#如何会制误差，可以是
+          error.plot = "pointrange",
+          label = NULL,#产要添加的标签
+          font.label = list(size = 12,color ="black"),
+          label.select = NULL,#产要添加标签的数据点
+          repel = TRUE,
+          label.rectangle = TRUE, 
+          ggtheme = theme_pubr())+ 
+  theme(axis.text.x = element_text(angle = 90,hjust = 1,vjust = 1)) + 
+  stat_compare_means(label = "p.signif",method = "t.test",ref.group= ".all.",hide.ns = F,
+                     symnum.args=list(cutpoints = c(0,0.001,0.01,0.05,1),symbols = c("***","**","*","ns")))
+
+
+#Step3 spearmanplot
+sig_gene <- c( "CDK1","AURKA","CCNB2","BIRC5","CCNB1","TYMS","TOP2A")#筛选后得到的hubgene
+#install.packages('ggcorrplot')
+library(psych)
+x <- t(exp1)
+x <- x[,sig_gene]
+y <- t(ssgsea.1)
+library(psych)
+d <- corr.test(x,y,use="complete",method = 'spearman')
+r <- d$r
+p <- d$p
+
+library(ggcorrplot)
+ggcorrplot(t(d$r), 
+           show.legend = T, 
+           digits = 2,  sig.level = 0.05,
+           insig = 'blank',lab = T)+coord_flip() 
+
+
+library(pheatmap)
+library(reshape2)
+if (!is.null(p)){
+  ssmt <- p< 0.001
+  p[ssmt] <-'***'
+  smt <- p >0.001& p < 0.01
+  p[ssmt] <-'**'
+  smt <- p >0.01& p <0.05
+  p[smt] <- '*'
+  p[!ssmt&!smt]<- ''
+} else {
+  p <- F
+}
+mycol<-colorRampPalette(c("blue","white","tomato"))(100)
+pheatmap(r,scale = "none",cluster_row = T, cluster_col = T, border=NA,
+         display_numbers = p,fontsize_number = 12, number_color = "white",
+         cellwidth = 20, cellheight =20,color=mycol)
+
+
+
+###X cell###
+rm(list = ls())
+load("step3_output.Rdata")
+group <- pd[,c("geo_accession", "tissue:ch1")]
+condition_function <- function(x) {
+  if (x == "adrenocortical carcinoma") {
+    return("ACC")
+  } else if (x == "normal adrenal") {
+    return("Normal")
+  } else {
+    return(x)  # 如果不是特定的条件，可以选择不替换
+  }
+}
+group$group <- sapply(group$tissue, condition_function)
+
+#devtools::install_github('dviraran/xCell')
+library(xCell)
+library(tidyverse)
+library(ggplot2)
+library(preprocessCore)
+library(limma)
+library(xCell)
+library(corrplot)
+library(ggpubr)
+library(ggsci)
+library(reshape2)
+library(pheatmap)
+library(RColorBrewer)
+xcell <- xCell::xCellAnalysis(exp1)
+xcell_barplot<-as.data.frame(t(xcell))
+xcell_barplot<-select(xcell_barplot,-c(65,66,67))
+xcell_barplot<-rownames_to_column(xcell_barplot,var="Sample")
+group <- group[,-2]
+xcell_barplot <- merge(xcell_barplot,group,by.x = "Sample",by.y = "geo_accession",all.x = T)
+xcell_barplot<- melt(xcell_barplot,id.vars=c("Sample","group"))
+
+colnames(xcell_barplot)<-c("Sample","Group","celltype","composition") 
+#boxplot
+boxplot_xcell<- ggplot(xcell_barplot, aes(x = celltype, y = composition))+ 
+  labs(y="Cell composition",x= "")+  
+  geom_boxplot(aes(fill = Group),position=position_dodge(0.5),width=0.5)+ 
+  scale_fill_lancet()+
+  #修改主题
+  theme_bw() + 
+  theme(axis.title = element_text(size = 12,color ="black"), 
+        axis.text = element_text(size= 12,color = "black"),
+        panel.grid.minor.y = element_blank(),
+        panel.grid.minor.x = element_blank(),
+        axis.text.x = element_text(angle = 45, hjust = 1 ),
+        panel.grid=element_blank(),
+        legend.position = "top",
+        legend.text = element_text(size= 12),
+        legend.title= element_text(size= 12)
+  ) +
+  stat_compare_means(aes(group =  Group),
+                     label = "p.signif",
+                     method = "wilcox.test",
+                     hide.ns = T)#隐藏不显著的
+print(boxplot_xcell)
+ggsave(file="xcell_boxplot.pdf",boxplot_xcell,height=10,width=17)
+
+#heatplot
+heatmap_xcell<-xcell[-c(65,66,67),]
+sample<-match(group$geo_accession,colnames(heatmap_xcell))
+final_plot<-heatmap_xcell[,sample]
+rownames(group) <- group$geo_accession
+group$group <- factor(group$group,levels = c("ACC","Normal"))
+group <- group[order(group$group),]
+ancol <- group[,-1,drop = F]
+order_indices <- match(group$geo_accession, colnames(final_plot))
+final_plot <- final_plot[, order_indices]
+
+annColors <- list("type" = c("Normal" = "#77AADD","ACC" = "#EE8866"))
+indata <- final_plot[,colSums(final_plot) > 0]
+standarize.fun <- function(indata=NULL, halfwidth=NULL, centerFlag=T, scaleFlag=T) {  
+  outdata=t(scale(t(indata), center=centerFlag, scale=scaleFlag))
+  if (!is.null(halfwidth)) {
+    outdata[outdata>halfwidth]=halfwidth
+    outdata[outdata<(-halfwidth)]= -halfwidth
+  }
+  return(outdata)
+}
+plotdata <- standarize.fun(indata,halfwidth = 2)
+pheatmap(plotdata,
+         annotation=ancol,
+         annotation_colors = annColors,
+         cluster_cols = F,#列不聚类
+         cluster_rows = F,#行不聚类
+         color = colorRampPalette(c("CornflowerBlue", "white", "Salmon"))(50),
+         show_colnames = F,
+         show_rownames=T,
+         border_color ="black",
+         gaps_col=table(ancol$group)[1],
+         fontsize = 8,
+         fontsize_row=7.5,
+         fontsize_col=6,
+         cellwidth=8,
+         cellheight=12,
+         filename="xcell_heatmap.pdf")
+
+#barplot
+xcell_barplot<-as.data.frame(t(xcell))
+xcell_barplot<-select(xcell_barplot,-c(65,66,67))
+xcell_barplot<-select(xcell_barplot,c("Adipocytes","CD8+ naive T-cells",
+                                      "CD8+ T-cells",
+                                      "Class-switched memory B-cells","Fibroblasts",
+                                      "HSC","Macrophages","Macrophages M1","Macrophages M2",
+                                      "Neurons","NK cells","Pericytes","pro B-cells",
+                                      "Th2 cells"))#从boxplot找显著
+xcell_barplot$Sample <- rownames(xcell_barplot)
+rownames(xcell_barplot) <- NULL
+xcell_barplot <- xcell_barplot[, c("Sample", setdiff(names(xcell_barplot), "Sample"))]
+xcell_barplot<-merge(xcell_barplot,group,by.x = "Sample",by.y = "geo_accession",all.x = T)
+xcell_barplot<- melt(xcell_barplot,id.vars=c("Sample","group"))
+
+colnames(xcell_barplot)<-c("Sample","Group","celltype","composition")
+colour =  c(brewer.pal(12, "Paired"),brewer.pal(12, "Set3"),brewer.pal(8, "Dark2"))
+ggplot(data=xcell_barplot,aes(x=Sample,y=composition,fill=celltype))+
+  geom_bar(position="fill",stat="identity")+
+  scale_fill_manual(values = colour)+
+  labs(x="",y="",title="cell proportion")+
+  scale_y_continuous(expand=c(0,0))+
+  guides(fill = guide_legend(ncol = 2))+
+  theme_bw()+
+  theme(legend.key = element_blank(),legend.title = element_blank(),
+        panel.grid=element_blank(), 
+        axis.text.x=element_text(angle=45,hjust=1.1,size=10),
+        #axis.ticks.x=element_blank(),
+        plot.title=element_text(hjust=0.5))
+ggsave("xcell_barplot.pdf",width=15,height=8)
+
+#免疫细胞相关性热图
+xcell_corheatmap<-as.data.frame(t(xcell))
+#删除最后无关三列
+xcell_corheatmap<-select(xcell_corheatmap,-c(65,66,67))
+#提取显著差异细胞含量
+xcell_corheatmap<-select(xcell_corheatmap,c("Adipocytes","Fibroblasts","HSC",
+                                            "Macrophages","Macrophages M1","Macrophages M2",
+                                            "Neurons","Pericytes","pro B-cells",
+                                      "Th2 cells"))#筛选显著
+cor<-cor(xcell_corheatmap)
+pdf("xcell_cor_heatmap.pdf",width=12,height=10)
+corrplot(cor,method = "square",cl.pos='r',addCoef.col="black",
+         tl.pos="lt", tl.cex=1, tl.col="black",
+         pch.cex = 0.6,pch.col = "black") 
+dev.off()
+
+
