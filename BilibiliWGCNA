@@ -1,5 +1,5 @@
 rm(list=ls())
-setwd('C:\\Users\\如意\\Desktop\\WGCNA-GIST')
+setwd('C:\\Users\\EDY\\Desktop\\y\\WGCNA')
 load("step3_output.Rdata")#GEO
 library(stringr)
 library(dplyr)
@@ -11,12 +11,8 @@ exp2 <- t(exp1)
 exp2 <- exp1[match(x,rownames(exp2))]
 
 
-group_list <- str_split(as.character(filtered_pd$`condition:ch1`),' ',simplify = T)[,1]
-group_list <- c(rep('adrenocortical carcinoma',29),rep('normal',5),rep('adrenocortical carcinoma',29))
-group_list
-
-exp1 <- exp2[,c(1:29,30:35,36:63)]
-group_list <- group_list[c(1:29,30:35,36:63)]
+group_list <- ifelse(str_detect(filtered_pd$`tissue:ch1`, "normal adrenal"), "Normal","ACC")
+table(group_list)
 
 
 suppressMessages(library(limma))
@@ -25,10 +21,9 @@ colnames(design)=levels(factor(group_list))
 rownames(design)=colnames(exp2)
 design <- data.frame(design)
 samples <- design
-design
+table(design)
 write.csv(design, file = "group.csv", row.names = T)
 group <- read.csv("group.csv")
-exp1 = t(exp1)
 
 
 library(WGCNA)
@@ -170,3 +165,37 @@ labeledHeatmap(Matrix = modTraitCor,
                setStdMargins = FALSE, cex.text = 0.5, zlim = c(-1,1)
                , main = paste("Module-trait relationships"))
 dev.off()
+
+ACC = as.data.frame(samples$ACC)
+names(ACC) = "ACC"
+modNames = substring(names(MEs), 3)
+
+geneModuleMembership = as.data.frame(cor(datExpr, MEs, use = "p"))
+MMPvalue = as.data.frame(corPvalueStudent(as.matrix(geneModuleMembership), ncol(datExpr1)))
+
+names(geneModuleMembership) = paste("MM", modNames, sep="")
+names(MMPvalue) = paste("p.MM", modNames, sep="")
+
+geneTraitSignificance = as.data.frame(cor(datExpr, ACC, use = "p"))
+GSPvalue = as.data.frame(corPvalueStudent(as.matrix(geneTraitSignificance), ncol(datExpr1)))
+
+names(geneTraitSignificance) = paste("GS.", names(ACC), sep="")
+names(GSPvalue) = paste("p.GS.", names(ACC), sep="")
+
+table(mergedColors[net$blockGenes[[1]]])
+
+moduleGenes = moduleColors=="turquoise"
+sizeGrWindow(7, 7)
+par(mfrow = c(1,1))
+pdf("4Module membership.pdf",width = 6, height = 6)
+verboseScatterplot(abs(geneModuleMembership[moduleGenes, "MM2"]),
+                   abs(geneTraitSignificance[moduleGenes, 1]),
+                   xlab = paste("Module Membership in turquoise module"),
+                   ylab = "Gene significance for body weight",
+                   main = paste("Module membership vs. gene significance\n"),
+                   cex.main = 1.2, cex.lab = 1.2, cex.axis = 1.2, col = "turquoise")
+#abline(h=0.4,v=0.8,col="red",lwd=1.5)#筛选线，用于筛选模块中具有高度相关性和显著性的基因
+dev.off()
+
+
+
