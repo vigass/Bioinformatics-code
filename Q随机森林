@@ -11,60 +11,22 @@ hubgenes_expression<-exp1[match(hubgenes,rownames (exp1)),]
 save(exp1,hubgenes,hubgenes_expression,group_list,design,file = "step_ROC.Rdata")
 
 x=as.matrix(hubgenes_expression[,c(1:ncol(hubgenes_expression))])
-design=as.data.frame(design)
-y=data.matrix(design$adrenocortical.carcinoma)
+design=as.data.frame(samples)
+y=data.matrix(design$group)
+y <- as.factor(y)
 x=t(x)
-k <- data.frame(cbind(Normal = design$normal,x))
-library(caret)
-library(shape)
-set.seed(1000293)
-control <- rfeControl(functions = rfFuncs,#选择随机森林
-                      method = "LGOCV",#选择交叉验证法
-                      number = 10)#10折交叉验证
-tmp <- k
-candidate.gene <- colnames(k)
-results <- rfe(x = tmp[,-1],
-              y = as.factor(k$Normal),
-              metric = "Accuracy",
-              sizes = 1:(length(candidate.gene)-2),
-              rfeControl = control)
-final.gene <- predictors(results)
-write.table(final.gene,"output_selected features.txt",sep = "\t",
-            row.names = F,col.names = F,quote = F)
+library(randomForest)
+set.seed(100)
+rf <- randomForest(y~.,  data = x , ntree = 500)
+plot(rf, main = 'Random Forest', lwd = 2)
 
-accres <- results$results
-write.table(accres,"output_accurary result.txt",sep = "\t",
-            row.names = F,col.names = F,quote = F)
-
-jco <- c("#2874c5","#eabf00")
-
-pdf(file = "accuracy.pdf",width = 6,height = 4.5)
-par(bty = "o",mgp = c(2,0.5,0),mar = c(3.1,4.1,2.1,2.1),tcl = -.25,las = 1)
-index <- which.max(accres$Accuracy)
-
-
-plot(accres$Variables,
-     accres$Accuracy,
-     ylab = "",
-     xlab = "Number of genes",
-     col = "steelblue")
-lines(accres$Variables,accres$Accuracy,col = "steelblue")
-
-points(index,accres[index,"Accuracy"],
-       col = "steelblue",
-       pch = 19,
-       cex = 1.2)
-mtext("Accuracy (Repeated Cross-Validation)",side = 2,line = 2.5,las = 3)
-#Arrows(x0 = index - 7,x1 = index - 2,
-#       y0 = accres[index,"Accuracy"],
-#       y1 = accres[index,"Accuracy"],
-#       arr.length = 0.2,
-#      lwd = 2,
-#       col = "black",
-#       arr.type = "triangle")
-#text(x = index - 7,
-#     y = accres[index,"Accuracy"]+0.02,
-#     labels = paste0("N=",index),
-#     pos = 3)
-dev.off()
-
+optionTrees = which.min(rf$err.rate[, 1])
+#rf2 = randomForest(y~., data = x, ntree = optionTrees, importance = T)
+rf2 = randomForest(y~., data = x, ntree = optionTrees)
+importance = importance(x = rf2)
+varImpPlot(rf2, main = 'Feature Importance')
+rfGenes = importance[order(importance[, 'MeanDecreaseGini'], decreasing = T), ]
+rfGenes = names(rfGenes[rfGenes > 0.2])
+rfGenes
+write.table(rfGenes, 'random_genes.txt', sep = "\t",
+            row.names = F, col.names = F, quote = )
