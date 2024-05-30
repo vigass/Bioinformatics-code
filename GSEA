@@ -1,0 +1,51 @@
+setwd('D:\\Test\\GSEA\\BRCA')
+
+rm(list = ls())
+# load('step5_output.Rdata')
+# rm(exp2, exp3, filter_pd, group_list)
+deg <- read.csv('result.csv')
+
+
+head(deg)
+
+library(org.Hs.eg.db)
+library(clusterProfiler)
+library(pathview)#BiocManager::install("pathview")
+library(enrichplot)
+library(dplyr)
+deg <- deg %>%
+  rename(SYMBOL = genes)
+
+gene <- deg$SYMBOL
+gene=bitr(gene,fromType="SYMBOL",toType="ENTREZID",OrgDb="org.Hs.eg.db")
+gene <- dplyr::distinct(gene,SYMBOL,.keep_all=TRUE)
+
+deg_all <- deg %>%
+  inner_join(gene, by = 'SYMBOL')
+dim(deg_all)
+head(deg_all)
+
+deg_all_sort <- deg_all %>%
+  arrange(desc(log2FoldChange))
+head(deg_all_sort)
+
+geneList = deg_all_sort$log2FoldChange #把foldchange按照从大到小提取出来
+names(geneList) <- deg_all_sort$ENTREZID #给上面提取的foldchange加上对应上ENTREZID
+geneList <- sort(geneList, decreasing = TRUE)
+head(geneList)
+
+kegg_gmt <- read.gmt("c2.cp.v2023.2.Hs.entrez.gmt") #读gmt文件
+gsea <- GSEA(geneList,
+             TERM2GENE = kegg_gmt,
+             pvalueCutoff = 1) #GSEA分析
+head(gsea)
+dotplot(gsea)
+gseaplot2(gsea, 1, pvalue_table = T)
+
+#KEGG
+gse.KEGG <- gseKEGG(geneList,
+                    organism = "hsa", # 人 hsa
+                    pvalueCutoff = 1,
+                    pAdjustMethod = "BH",) #具体参数在下面
+head(gse.KEGG)
+gseaplot2(gse.KEGG, 2, pvalue_table = T) 
