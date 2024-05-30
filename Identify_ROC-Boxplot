@@ -1,0 +1,139 @@
+setwd('D:\\Test\\knee arthritis\\GSE55457\\identify')
+
+rm(list = ls())
+library(GEOquery)
+options(timeout = 300)
+gse = "GSE55235"
+eSet <- getGEO(gse,
+               destdir = '.',
+               getGPL = F)
+
+exp <- exprs(eSet[[1]])
+exp[1:4,1:4]
+pd <- pData(eSet[[1]])
+gpl <- eSet[[1]]@annotation
+p = identical(rownames(pd),colnames(exp))
+save(gse,exp,pd,gpl,file = "step2_output.Rdata")
+
+rm(list = ls())
+load("step2_output.Rdata")
+library(stringr)
+library(dplyr)
+table(colnames(exp))
+View(pd)
+if(T){
+  a = getGEO(gpl,destdir = ".")
+  b = a@dataTable@table
+  colnames(b)
+  ids2 = b[,c("ID","Gene Symbol")]
+  colnames(ids2) = c("probe_id","symbol")
+  ids2 = ids2[ids2$symbol!="" & !str_detect(ids2$symbol,"///"),]
+}
+
+exp1 <- data.frame(exp)
+exp1 <- mutate(exp1, id = rownames(exp))
+exp1 <- merge(x = exp1, y = ids2, by.x = "id", by.y = 'probe_id')
+exp1 <- exp1[!duplicated(exp1$symbol),]
+
+row.names(exp1) <- exp1$symbol
+exp1 <- exp1[,-1]
+exp1 <- exp1[,-ncol(exp1)]
+View(exp1)
+save(exp1,pd,ids2, file = "step3_output.Rdata")
+
+
+
+rm(list = ls())
+load('step3_output.Rdata')
+
+genes <- c('FBLN5', 'MPV17', 'PTGS1', 'BTK', 'KRT1')
+exp2 <- exp1[genes, ]
+
+
+roc_exp <- as.matrix(exp2)
+# roc_exp<-exp_ml[match(genes,rownames (exp_ml)),]
+# samples$group <- ifelse(samples$group == "0", 'normal', 'tumor')
+filter_pd <- pd[, c('geo_accession', 'source_name_ch1')]
+filter_pd$group <- ifelse(filter_pd$source_name_ch1 == 'synovial tissue from healthy joint', '0',
+                          ifelse(filter_pd$source_name_ch1 == 'synovial tissue from osteoarthritic joint', '1', 'RA'))
+filter_pd1 <- filter_pd %>%
+  filter(group %in% c('0','1'))
+
+
+samples <- filter_pd1[, c('geo_accession', 'group')]
+
+samples$group <- factor(samples$group)
+roc_exp <- roc_exp[, samples$geo_accession]
+
+library(ggsci)
+cors <- pal_lancet()(6)
+
+library(pROC)
+roc_results <- list()
+for (gene in genes) {
+  # 提取当前基因的表达值
+  predictor <- roc_exp[gene, ]
+  # 计算 ROC
+  roc_obj <- roc(response = samples$group, predictor = predictor)
+  # 将 ROC 对象保存到列表中
+  roc_results[[gene]] <- roc_obj
+  # 打印 AUC 值
+  cat("Gene:", gene, "AUC:", auc(roc_obj), "\n")
+}
+plot(roc_results[[1]], col = cors[1], lwd = 2, 
+     main = "ROC Curves for Multiple Genes", 
+     ylim = c(0, 1), xlim = c(0, 1), 
+     xlab = "False Positive Rate (1 - Specificity)", 
+     ylab = "True Positive Rate (Sensitivity)")
+abline(a = 0, b = 1, lwd = 2, lty = 2, col = "red")
+for (i in seq_along(roc_results)) {
+  lines(roc_results[[i]], col = cors[i], lwd = 2)
+}
+legend("bottomright", legend = names(roc_results), col = cors, lwd = 2, bty = "n")
+for (i in seq_along(roc_results)) {
+  text(x = 1, y = 1 - 0.05 * i, 
+       labels = paste(names(roc_results)[i], "AUC =", round(auc(roc_results[[i]]), 2)), 
+       col = cors[i], cex = 1.2, pos = 4)
+}
+
+
+#boxplot
+rm(list = ls())
+load('step3_output.Rdata')
+genes <- c('FBLN5', 'PTGS1', 'BTK', 'KRT1')
+exp2 <- exp1[genes, ]
+# View(exp2)
+
+filter_pd <- pd[, c('geo_accession', 'source_name_ch1')]
+filter_pd$group <- ifelse(filter_pd$source_name_ch1 == 'synovial tissue from healthy joint', 'Normal',
+                          ifelse(filter_pd$source_name_ch1 == 'synovial tissue from osteoarthritic joint', 'OA', 'RA'))
+filter_pd1 <- filter_pd %>%
+  filter(group %in% c('Normal','OA'))
+group <- filter_pd1[, c("geo_accession", "group")]
+
+exp2 <- as.data.frame(t(exp2))
+exp2$geo_accession <- rownames(exp2)
+data <- merge(group,exp2, by = 'geo_accession')
+
+library(tidyr)
+data_long <- gather(data, key = "gene", value = "expression", -geo_accession, -group)
+
+library(ggplot2)
+library(ggpubr)
+library(ggsci)
+cors <- pal_lancet()(2)
+
+p <- ggplot(data_long, aes(x = gene, y = expression, fill = group)) +
+  geom_boxplot(aes(fill = group)) + 
+  scale_fill_manual(values=cors) + 
+  labs(x = "", y = "Expression", fill = "Group") + 
+  ggtitle('Gene Expression Comparison') +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+  facet_wrap(~gene,scales = "free") + 
+  stat_compare_means(aes(label = ..p.signif..), method = "t.test",  paired = TRUE) 
+ 
+p 
+
+
+
